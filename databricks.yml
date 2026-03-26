@@ -21,4 +21,4 @@ targets:
     mode: development
     default: true
     workspace:
-      profile: fe-vm
+      profile: fevm

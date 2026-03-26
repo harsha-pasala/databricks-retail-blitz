@@ -53,3 +53,8 @@ version = "{version}"
 [tool.hatch.build]
 artifacts = ["src/retail_app/__dist__", "src/retail_app/_metadata.py"]
 exclude = ["src/retail_app/ui"]
+
+[[tool.uv.index]]
+name = "databricks-proxy"
+url = "https://pypi-proxy.dev.databricks.com/simple/"
+default = true
