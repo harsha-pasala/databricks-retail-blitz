@@ -62,13 +62,17 @@ async def _check_fraud(
 
     start = time.perf_counter()
     response = await asyncio.to_thread(
-        ws.serving_endpoints.query,
+        ws.serving_endpoints_data_plane.query,
         name=FRAUD_ENDPOINT_NAME,
         dataframe_records=payload,
     )
     model_call_ms = (time.perf_counter() - start) * 1000
 
-    prediction = response.predictions[0]
+    predictions = response.predictions or []
+    if not predictions:
+        raise ValueError("Model serving endpoint returned no predictions")
+
+    prediction = predictions[0]
     return {
         "fraud_probability": prediction["fraud_probability"],
         "fraud_flag": prediction["fraud_flag"],

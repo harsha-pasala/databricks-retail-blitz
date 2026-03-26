@@ -49,9 +49,6 @@ function generateCardNumber(): string {
 }
 
 interface LatencyBreakdown {
-  uiRoundTripMs: number;
-  apiCallMs: number;
-  backendTotalMs: number;
   modelCallMs: number;
   modelLookupMs?: number;
   modelInferenceMs?: number;
@@ -97,9 +94,7 @@ function Index() {
     if (!selectedCountry || !cardNumber.replace(/\s/g, "") || submitting) return;
     setSubmitting(true);
 
-    const uiStart = performance.now();
     try {
-      const apiStart = performance.now();
       const res = await fetch("/api/transactions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,15 +107,10 @@ function Index() {
         }),
       });
       const data = await res.json();
-      const apiCallMs = performance.now() - apiStart;
-      const uiRoundTripMs = performance.now() - uiStart;
 
       const declined = data.status === "declined";
       const latency: LatencyBreakdown | undefined = data.latency
         ? {
-            uiRoundTripMs: Math.round(uiRoundTripMs * 100) / 100,
-            apiCallMs: Math.round(apiCallMs * 100) / 100,
-            backendTotalMs: data.latency.backend_total_ms,
             modelCallMs: data.latency.model_call_ms,
             modelLookupMs: data.latency.model_lookup_ms ?? undefined,
             modelInferenceMs: data.latency.model_inference_ms ?? undefined,

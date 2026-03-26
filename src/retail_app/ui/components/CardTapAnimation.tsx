@@ -1,9 +1,6 @@
 import { motion, AnimatePresence } from "motion/react";
 
 interface LatencyBreakdown {
-  uiRoundTripMs: number;
-  apiCallMs: number;
-  backendTotalMs: number;
   modelCallMs: number;
   modelLookupMs?: number;
   modelInferenceMs?: number;
@@ -72,7 +69,13 @@ export function CardTapAnimation({
   const screenText = declined ? "DECLINED" : "APPROVED";
 
   const maxMs = latency
-    ? Math.max(latency.uiRoundTripMs, latency.apiCallMs, 1)
+    ? Math.max(
+        latency.modelCallMs,
+        latency.modelTotalMs ?? 0,
+        latency.modelLookupMs ?? 0,
+        latency.modelInferenceMs ?? 0,
+        1
+      )
     : 1;
 
   return (
@@ -364,39 +367,28 @@ export function CardTapAnimation({
                   </div>
 
                   <LatencyRow
-                    label="UI Round-trip"
-                    ms={latency.uiRoundTripMs}
-                    maxMs={maxMs}
-                    color="#6366F1"
-                  />
-                  <LatencyRow
-                    label="API Call"
-                    ms={latency.apiCallMs}
-                    maxMs={maxMs}
-                    color="#8B5CF6"
-                    indent={8}
-                  />
-                  <LatencyRow
-                    label="Backend Total"
-                    ms={latency.backendTotalMs}
-                    maxMs={maxMs}
-                    color="#A78BFA"
-                    indent={16}
-                  />
-                  <LatencyRow
                     label="Model Serving"
                     ms={latency.modelCallMs}
                     maxMs={maxMs}
                     color="#FF3621"
-                    indent={24}
+                    indent={8}
                   />
+                  {latency.modelTotalMs !== undefined && (
+                    <LatencyRow
+                      label="Model Total"
+                      ms={latency.modelTotalMs}
+                      maxMs={maxMs}
+                      color="#FB7185"
+                      indent={16}
+                    />
+                  )}
                   {latency.modelLookupMs !== undefined && (
                     <LatencyRow
                       label="DB Lookup"
                       ms={latency.modelLookupMs}
                       maxMs={maxMs}
                       color="#F59E0B"
-                      indent={32}
+                      indent={24}
                     />
                   )}
                   {latency.modelInferenceMs !== undefined && (
@@ -405,7 +397,7 @@ export function CardTapAnimation({
                       ms={latency.modelInferenceMs}
                       maxMs={maxMs}
                       color="#00A972"
-                      indent={32}
+                      indent={24}
                     />
                   )}
                 </motion.div>
