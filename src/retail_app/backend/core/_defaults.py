@@ -25,7 +25,11 @@ class _ConfigDependency(LifespanDependency):
 class _WorkspaceClientDependency(LifespanDependency):
     @asynccontextmanager
     async def lifespan(self, app: FastAPI) -> AsyncGenerator[None, None]:
-        app.state.workspace_client = WorkspaceClient()
+        try:
+            app.state.workspace_client = WorkspaceClient()
+        except Exception as e:
+            logger.warning(f"WorkspaceClient init failed (OK for local dev): {e}")
+            app.state.workspace_client = None
         yield
 
     @staticmethod
