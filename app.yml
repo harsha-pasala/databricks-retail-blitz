@@ -1,1 +1,10 @@
 command: ["uvicorn", "retail_app.backend.app:app", "--workers", "2"]
+env:
+  - name: OIDC_TOKEN_URL
+    value: "https://adb-7405612444656138.18.azuredatabricks.net/oidc/v1/token"
+  - name: DB_HOST
+    value: "ep-crimson-meadow-e1ckeiiu.database.eastus2.azuredatabricks.net"
+  - name: DB_NAME
+    value: "databricks_postgres"
+  - name: DB_PORT
+    value: "5432"

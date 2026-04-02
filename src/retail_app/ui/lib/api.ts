@@ -12,14 +12,6 @@ export class ApiError extends Error {
         this.body = body;
     }
 }
-export interface EventHubMessageOut {
-    event_id: string;
-    message: string;
-    partition_key: string;
-    status: string;
-    timestamp: string;
-    topic: string;
-}
 export interface FraudCheckLatency {
     backend_total_ms: number;
     model_call_ms: number;
@@ -30,12 +22,18 @@ export interface FraudCheckLatency {
 export interface HTTPValidationError {
     detail?: ValidationError[];
 }
+export interface ProfileSaveOut {
+    message: string;
+    status: string;
+    user_id: string;
+}
 export interface TransactionIn {
     amount: number;
     country: string;
     country_code: string;
     credit_card_number: string;
     currency?: string;
+    user_id: string;
 }
 export interface TransactionOut {
     amount: number;
@@ -63,7 +61,6 @@ export const TransactionStatus = {
 export type TransactionStatus = typeof TransactionStatus[keyof typeof TransactionStatus];
 export interface UserProfileIn {
     allow_international_transactions?: boolean;
-    country_code: string;
     country_of_residence: string;
     daily_limit?: number;
     email: string;
@@ -72,21 +69,28 @@ export interface UserProfileIn {
     phone?: string | null;
     preferred_currency?: string;
     two_factor_enabled?: boolean;
+    user_id: string;
 }
 export interface UserProfileOut {
     allow_international_transactions: boolean;
-    country_code: string;
+    card_bin: string;
+    card_network?: string | null;
     country_of_residence: string;
+    credit_card_number: string;
     daily_limit: number;
     email: string;
     enable_notifications: boolean;
-    eventhub_status: string;
     full_name: string;
-    id: string;
     phone?: string | null;
     preferred_currency: string;
     two_factor_enabled: boolean;
-    updated_at: string;
+    user_id: string;
+}
+export interface UserSummary {
+    credit_card_number?: string | null;
+    email: string;
+    full_name: string;
+    user_id: string;
 }
 export interface ValidationError {
     ctx?: Record<string, unknown>;
@@ -98,10 +102,17 @@ export interface ValidationError {
 export interface VersionOut {
     version: string;
 }
-export const getProfile = async (options?: RequestInit): Promise<{
+export interface GetProfileParams {
+    user_id?: string;
+}
+export const getProfile = async (params?: GetProfileParams, options?: RequestInit): Promise<{
     data: UserProfileOut;
 }> =>{
-    const res = await fetch("/api/profile", {
+    const searchParams = new URLSearchParams();
+    if (params?.user_id != null) searchParams.set("user_id", String(params?.user_id));
+    const queryString = searchParams.toString();
+    const url = queryString ? `/api/profile?${queryString}` : "/api/profile";
+    const res = await fetch(url, {
         ...options,
         method: "GET"
     });
@@ -119,39 +130,42 @@ export const getProfile = async (options?: RequestInit): Promise<{
         data: await res.json()
     };
 };
-export const getProfileKey = ()=>{
+export const getProfileKey = (params?: GetProfileParams)=>{
     return [
-        "/api/profile"
+        "/api/profile",
+        params
     ] as const;
 };
 export function useGetProfile<TData = {
     data: UserProfileOut;
 }>(options?: {
+    params?: GetProfileParams;
     query?: Omit<UseQueryOptions<{
         data: UserProfileOut;
     }, ApiError, TData>, "queryKey" | "queryFn">;
 }) {
     return useQuery({
-        queryKey: getProfileKey(),
-        queryFn: ()=>getProfile(),
+        queryKey: getProfileKey(options?.params),
+        queryFn: ()=>getProfile(options?.params),
         ...options?.query
     });
 }
 export function useGetProfileSuspense<TData = {
     data: UserProfileOut;
 }>(options?: {
+    params?: GetProfileParams;
     query?: Omit<UseSuspenseQueryOptions<{
         data: UserProfileOut;
     }, ApiError, TData>, "queryKey" | "queryFn">;
 }) {
     return useSuspenseQuery({
-        queryKey: getProfileKey(),
-        queryFn: ()=>getProfile(),
+        queryKey: getProfileKey(options?.params),
+        queryFn: ()=>getProfile(options?.params),
         ...options?.query
     });
 }
 export const updateProfile = async (data: UserProfileIn, options?: RequestInit): Promise<{
-    data: EventHubMessageOut;
+    data: ProfileSaveOut;
 }> =>{
     const res = await fetch("/api/profile", {
         ...options,
@@ -178,7 +192,7 @@ export const updateProfile = async (data: UserProfileIn, options?: RequestInit):
 };
 export function useUpdateProfile(options?: {
     mutation?: UseMutationOptions<{
-        data: EventHubMessageOut;
+        data: ProfileSaveOut;
     }, ApiError, UserProfileIn>;
 }) {
     return useMutation({
@@ -220,6 +234,58 @@ export function useCreateTransaction(options?: {
     return useMutation({
         mutationFn: (data)=>createTransaction(data),
         ...options?.mutation
+    });
+}
+export const listUsers = async (options?: RequestInit): Promise<{
+    data: UserSummary[];
+}> =>{
+    const res = await fetch("/api/users", {
+        ...options,
+        method: "GET"
+    });
+    if (!res.ok) {
+        const body = await res.text();
+        let parsed: unknown;
+        try {
+            parsed = JSON.parse(body);
+        } catch  {
+            parsed = body;
+        }
+        throw new ApiError(res.status, res.statusText, parsed);
+    }
+    return {
+        data: await res.json()
+    };
+};
+export const listUsersKey = ()=>{
+    return [
+        "/api/users"
+    ] as const;
+};
+export function useListUsers<TData = {
+    data: UserSummary[];
+}>(options?: {
+    query?: Omit<UseQueryOptions<{
+        data: UserSummary[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useQuery({
+        queryKey: listUsersKey(),
+        queryFn: ()=>listUsers(),
+        ...options?.query
+    });
+}
+export function useListUsersSuspense<TData = {
+    data: UserSummary[];
+}>(options?: {
+    query?: Omit<UseSuspenseQueryOptions<{
+        data: UserSummary[];
+    }, ApiError, TData>, "queryKey" | "queryFn">;
+}) {
+    return useSuspenseQuery({
+        queryKey: listUsersKey(),
+        queryFn: ()=>listUsers(),
+        ...options?.query
     });
 }
 export const version = async (options?: RequestInit): Promise<{

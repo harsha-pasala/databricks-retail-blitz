@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { WorldMap } from "@/components/WorldMap";
 import { CardTapAnimation } from "@/components/CardTapAnimation";
+import { useUser } from "@/lib/UserContext";
 
 export const Route = createFileRoute("/")({
   component: () => <Index />,
@@ -14,6 +15,11 @@ function formatCurrency(value: number): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function formatCardDisplay(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  return digits.replace(/(\d{4})(?=\d)/g, "$1 ");
 }
 
 function DatabricksLogo() {
@@ -41,13 +47,6 @@ function DatabricksLogo() {
   );
 }
 
-function generateCardNumber(): string {
-  const segments = Array.from({ length: 4 }, () =>
-    Math.floor(1000 + Math.random() * 9000).toString()
-  );
-  return segments.join(" ");
-}
-
 interface LatencyBreakdown {
   modelCallMs: number;
   modelLookupMs?: number;
@@ -63,16 +62,47 @@ interface TxnResult {
   latency?: LatencyBreakdown;
 }
 
+interface UserProfile {
+  userId: string;
+  fullName: string;
+  creditCardNumber: string;
+  countryOfResidence: string;
+  dailyLimit: number;
+  allowInternationalTransactions: boolean;
+}
+
 function Index() {
+  const { selectedUser } = useUser();
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
-  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(
-    null
-  );
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string | null>(null);
   const [amount, setAmount] = useState(500);
-  const [cardNumber, setCardNumber] = useState(generateCardNumber());
   const [showAnimation, setShowAnimation] = useState(false);
   const [txnResult, setTxnResult] = useState<TxnResult>({ declined: false });
   const [submitting, setSubmitting] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Load user profile when selected user changes
+  useEffect(() => {
+    if (!selectedUser) return;
+    setLoadingProfile(true);
+    fetch(`/api/profile?user_id=${encodeURIComponent(selectedUser.userId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setProfile({
+          userId: data.user_id,
+          fullName: data.full_name,
+          creditCardNumber: data.credit_card_number || "",
+          countryOfResidence: data.country_of_residence || "",
+          dailyLimit: data.daily_limit ?? 5000,
+          allowInternationalTransactions: data.allow_international_transactions ?? true,
+        });
+      })
+      .catch(() => setProfile(null))
+      .finally(() => setLoadingProfile(false));
+  }, [selectedUser]);
+
+  const cardNumber = profile?.creditCardNumber || "";
 
   const handleCountrySelect = useCallback((name: string, code: string) => {
     setSelectedCountry(name);
@@ -84,14 +114,8 @@ function Index() {
     setSelectedCountryCode(null);
   }, []);
 
-  const handleCardInput = (value: string) => {
-    const digits = value.replace(/\D/g, "").slice(0, 16);
-    const formatted = digits.replace(/(\d{4})(?=\d)/g, "$1 ");
-    setCardNumber(formatted);
-  };
-
   const handleSubmit = async () => {
-    if (!selectedCountry || !cardNumber.replace(/\s/g, "") || submitting) return;
+    if (!selectedCountry || !cardNumber || submitting || !profile) return;
     setSubmitting(true);
 
     try {
@@ -99,10 +123,11 @@ function Index() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          user_id: profile.userId,
           country: selectedCountry,
           country_code: selectedCountryCode,
           amount,
-          credit_card_number: cardNumber.replace(/\s/g, ""),
+          credit_card_number: cardNumber,
           currency: "USD",
         }),
       });
@@ -138,8 +163,7 @@ function Index() {
   };
 
   const sliderPercent = ((amount - 10) / (10000 - 10)) * 100;
-  const isFormValid =
-    selectedCountry && cardNumber.replace(/\s/g, "").length >= 12;
+  const isFormValid = selectedCountry && cardNumber.length >= 12 && profile;
 
   return (
     <div className="relative h-screen w-screen overflow-hidden flex flex-col bg-background">
@@ -158,6 +182,11 @@ function Index() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            {selectedUser && (
+              <span className="text-xs text-muted-foreground font-mono">
+                {selectedUser.fullName}
+              </span>
+            )}
             <Link
               to="/profile"
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -209,152 +238,169 @@ function Index() {
               </p>
             </div>
 
-            {/* Country Selection Display */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Country
-              </label>
-              <div
-                className={`h-12 rounded-lg border-2 flex items-center px-4 transition-all duration-200 ${
-                  selectedCountry
-                    ? "border-[#FF3621]/50 bg-[#FF3621]/5"
-                    : "border-dashed border-border bg-muted/30"
-                }`}
-              >
-                {selectedCountry ? (
-                  <div className="flex items-center justify-between w-full">
-                    <span className="font-medium text-foreground">
-                      {selectedCountry}
-                    </span>
-                    <button
-                      onClick={() => {
-                        setSelectedCountry(null);
-                        setSelectedCountryCode(null);
-                      }}
-                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Change
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-sm text-muted-foreground">
-                    Select from map &larr;
-                  </span>
-                )}
+            {loadingProfile ? (
+              <div className="text-sm text-muted-foreground animate-pulse">
+                Loading user profile...
               </div>
-            </div>
-
-            {/* Amount Slider */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Amount
-                </label>
-                <span className="text-2xl font-bold text-[#FF3621]">
-                  {formatCurrency(amount)}
-                </span>
+            ) : !profile ? (
+              <div className="text-sm text-red-400">
+                No user selected. Go to Profile to select a user.
               </div>
-              <div className="relative pt-1">
-                <input
-                  type="range"
-                  min={10}
-                  max={10000}
-                  step={10}
-                  value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
-                  className="w-full h-2 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#FF3621] [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#FF3621] [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:cursor-pointer"
-                  style={{
-                    background: `linear-gradient(to right, #FF3621 0%, #FF3621 ${sliderPercent}%, var(--color-muted) ${sliderPercent}%, var(--color-muted) 100%)`,
-                  }}
-                />
-                <div className="flex justify-between mt-1">
-                  <span className="text-[10px] text-muted-foreground">$10</span>
-                  <span className="text-[10px] text-muted-foreground">$10K</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Credit Card Number */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Credit Card Number
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  value={cardNumber}
-                  onChange={(e) => handleCardInput(e.target.value)}
-                  placeholder="0000 0000 0000 0000"
-                  maxLength={19}
-                  className="w-full h-12 rounded-lg border border-border bg-background px-4 pr-12 font-mono text-sm tracking-wider text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-[#FF3621]/50 focus:border-[#FF3621]/50 transition-all"
-                />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <svg
-                    width="24"
-                    height="18"
-                    viewBox="0 0 24 18"
-                    fill="none"
-                    className="text-muted-foreground/40"
+            ) : (
+              <>
+                {/* Country Selection Display */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Transaction Country
+                  </label>
+                  <div
+                    className={`h-12 rounded-lg border-2 flex items-center px-4 transition-all duration-200 ${
+                      selectedCountry
+                        ? "border-[#FF3621]/50 bg-[#FF3621]/5"
+                        : "border-dashed border-border bg-muted/30"
+                    }`}
                   >
-                    <rect
-                      x="0.5"
-                      y="0.5"
-                      width="23"
-                      height="17"
-                      rx="2.5"
-                      stroke="currentColor"
-                    />
-                    <rect x="0" y="4" width="24" height="3" fill="currentColor" />
-                  </svg>
+                    {selectedCountry ? (
+                      <div className="flex items-center justify-between w-full">
+                        <span className="font-medium text-foreground">
+                          {selectedCountry}
+                        </span>
+                        <button
+                          onClick={() => {
+                            setSelectedCountry(null);
+                            setSelectedCountryCode(null);
+                          }}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        Select from map &larr;
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Payload Preview */}
-            <div className="space-y-2">
-              <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Transaction Payload
-              </label>
-              <div className="rounded-lg bg-[#1B3139] p-4 font-mono text-xs leading-relaxed overflow-x-auto">
-                <span className="text-white/40">{"{"}</span>
-                <br />
-                <span className="text-[#FF6F61] ml-4">&quot;country&quot;</span>
-                <span className="text-white/40">: </span>
-                <span className="text-[#00A972]">
-                  &quot;{selectedCountry || "..."}&quot;
-                </span>
-                <span className="text-white/40">,</span>
-                <br />
-                <span className="text-[#FF6F61] ml-4">
-                  &quot;country_code&quot;
-                </span>
-                <span className="text-white/40">: </span>
-                <span className="text-[#00A972]">
-                  &quot;{selectedCountryCode || "..."}&quot;
-                </span>
-                <span className="text-white/40">,</span>
-                <br />
-                <span className="text-[#FF6F61] ml-4">&quot;amount&quot;</span>
-                <span className="text-white/40">: </span>
-                <span className="text-[#6CB6FF]">{amount}</span>
-                <span className="text-white/40">,</span>
-                <br />
-                <span className="text-[#FF6F61] ml-4">
-                  &quot;credit_card&quot;
-                </span>
-                <span className="text-white/40">: </span>
-                <span className="text-[#00A972]">
-                  &quot;{cardNumber || "..."}&quot;
-                </span>
-                <span className="text-white/40">,</span>
-                <br />
-                <span className="text-[#FF6F61] ml-4">&quot;currency&quot;</span>
-                <span className="text-white/40">: </span>
-                <span className="text-[#00A972]">&quot;USD&quot;</span>
-                <br />
-                <span className="text-white/40">{"}"}</span>
-              </div>
-            </div>
+                {/* Amount Slider */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Amount
+                    </label>
+                    <span className="text-2xl font-bold text-[#FF3621]">
+                      {formatCurrency(amount)}
+                    </span>
+                  </div>
+                  <div className="relative pt-1">
+                    <input
+                      type="range"
+                      min={10}
+                      max={10000}
+                      step={10}
+                      value={amount}
+                      onChange={(e) => setAmount(Number(e.target.value))}
+                      className="w-full h-2 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#FF3621] [&::-webkit-slider-thumb]:shadow-lg [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#FF3621] [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:cursor-pointer"
+                      style={{
+                        background: `linear-gradient(to right, #FF3621 0%, #FF3621 ${sliderPercent}%, var(--color-muted) ${sliderPercent}%, var(--color-muted) 100%)`,
+                      }}
+                    />
+                    <div className="flex justify-between mt-1">
+                      <span className="text-[10px] text-muted-foreground">$10</span>
+                      <span className="text-[10px] text-muted-foreground">$10K</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Credit Card Number (read-only) */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Credit Card Number
+                  </label>
+                  <div className="relative">
+                    <div className="w-full h-12 rounded-lg border border-border bg-muted/30 px-4 pr-12 font-mono text-sm tracking-wider text-foreground flex items-center">
+                      {formatCardDisplay(cardNumber)}
+                    </div>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <svg
+                        width="24"
+                        height="18"
+                        viewBox="0 0 24 18"
+                        fill="none"
+                        className="text-muted-foreground/40"
+                      >
+                        <rect
+                          x="0.5"
+                          y="0.5"
+                          width="23"
+                          height="17"
+                          rx="2.5"
+                          stroke="currentColor"
+                        />
+                        <rect x="0" y="4" width="24" height="3" fill="currentColor" />
+                      </svg>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Card from {profile.fullName}&apos;s profile (read-only)
+                  </p>
+                </div>
+
+                {/* Payload Preview */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Transaction Payload
+                  </label>
+                  <div className="rounded-lg bg-[#1B3139] p-4 font-mono text-xs leading-relaxed overflow-x-auto">
+                    <span className="text-white/40">{"{"}</span>
+                    <br />
+                    <span className="text-[#FF6F61] ml-4">&quot;user_id&quot;</span>
+                    <span className="text-white/40">: </span>
+                    <span className="text-[#00A972]">
+                      &quot;{profile.userId}&quot;
+                    </span>
+                    <span className="text-white/40">,</span>
+                    <br />
+                    <span className="text-[#FF6F61] ml-4">&quot;country&quot;</span>
+                    <span className="text-white/40">: </span>
+                    <span className="text-[#00A972]">
+                      &quot;{selectedCountry || "..."}&quot;
+                    </span>
+                    <span className="text-white/40">,</span>
+                    <br />
+                    <span className="text-[#FF6F61] ml-4">
+                      &quot;country_code&quot;
+                    </span>
+                    <span className="text-white/40">: </span>
+                    <span className="text-[#00A972]">
+                      &quot;{selectedCountryCode || "..."}&quot;
+                    </span>
+                    <span className="text-white/40">,</span>
+                    <br />
+                    <span className="text-[#FF6F61] ml-4">&quot;amount&quot;</span>
+                    <span className="text-white/40">: </span>
+                    <span className="text-[#6CB6FF]">{amount}</span>
+                    <span className="text-white/40">,</span>
+                    <br />
+                    <span className="text-[#FF6F61] ml-4">
+                      &quot;credit_card&quot;
+                    </span>
+                    <span className="text-white/40">: </span>
+                    <span className="text-[#00A972]">
+                      &quot;{formatCardDisplay(cardNumber) || "..."}&quot;
+                    </span>
+                    <span className="text-white/40">,</span>
+                    <br />
+                    <span className="text-[#FF6F61] ml-4">&quot;currency&quot;</span>
+                    <span className="text-white/40">: </span>
+                    <span className="text-[#00A972]">&quot;USD&quot;</span>
+                    <br />
+                    <span className="text-white/40">{"}"}</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Submit Button */}
@@ -382,7 +428,7 @@ function Index() {
       <CardTapAnimation
         visible={showAnimation}
         onComplete={() => setShowAnimation(false)}
-        lastFour={cardNumber.replace(/\s/g, "").slice(-4) || "0000"}
+        lastFour={cardNumber.slice(-4) || "0000"}
         amount={formatCurrency(amount)}
         country={selectedCountry || ""}
         declined={txnResult.declined}

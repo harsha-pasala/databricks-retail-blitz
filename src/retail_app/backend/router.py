@@ -9,17 +9,17 @@ from typing import Any
 from databricks.sdk import WorkspaceClient
 
 from .core import create_router, Dependencies
-from .eventhub import send_event, EH_NAMESPACE, EH_TOPIC
-from .postgres import get_profile
+from .postgres import get_profile, list_users, update_profile
 from .models import (
     VersionOut,
     TransactionIn,
     TransactionOut,
     TransactionStatus,
     FraudCheckLatency,
+    UserSummary,
     UserProfileIn,
     UserProfileOut,
-    EventHubMessageOut,
+    ProfileSaveOut,
 )
 
 logger = logging.getLogger("retail-app.router")
@@ -38,8 +38,6 @@ CATEGORIES = [
     "Health & Beauty", "Sports & Outdoors",
 ]
 
-US_COUNTRY_CODES = {"840", "US", "USA"}
-
 
 def _format_credit_card(raw: str) -> str:
     digits = raw.replace(" ", "").replace("-", "")
@@ -51,7 +49,7 @@ async def _check_fraud(
 ) -> dict[str, Any]:
     payload = [
         {
-            "user": "usr-001",
+            "user": txn.user_id,
             "country": txn.country,
             "country_code": txn.country_code,
             "amount": txn.amount,
@@ -88,6 +86,20 @@ async def version():
     return VersionOut.from_metadata()
 
 
+@router.get("/users", response_model=list[UserSummary], operation_id="listUsers")
+async def list_users_route():
+    rows = list_users()
+    return [
+        UserSummary(
+            user_id=r["user_id"],
+            full_name=r["full_name"],
+            email=r["email"],
+            credit_card_number=r.get("credit_card_number"),
+        )
+        for r in rows
+    ]
+
+
 @router.post("/transactions", response_model=TransactionOut, operation_id="createTransaction")
 async def create_transaction(txn: TransactionIn, ws: Dependencies.Client):
     backend_start = time.perf_counter()
@@ -100,6 +112,7 @@ async def create_transaction(txn: TransactionIn, ws: Dependencies.Client):
     status = TransactionStatus.COMPLETED
     decline_reason: str | None = None
 
+    # --- Always call the fraud model first (for latency telemetry) ---
     if ws is not None:
         try:
             result = await _check_fraud(ws, txn)
@@ -110,9 +123,21 @@ async def create_transaction(txn: TransactionIn, ws: Dependencies.Client):
             latency = FraudCheckLatency(
                 backend_total_ms=round(backend_total_ms, 2),
                 model_call_ms=round(result["model_call_ms"], 2),
-                model_lookup_ms=round(result["model_lookup_ms"], 2) if result["model_lookup_ms"] is not None else None,
-                model_inference_ms=round(result["model_inference_ms"], 2) if result["model_inference_ms"] is not None else None,
-                model_total_ms=round(result["model_total_ms"], 2) if result["model_total_ms"] is not None else None,
+                model_lookup_ms=(
+                    round(result["model_lookup_ms"], 2)
+                    if result["model_lookup_ms"] is not None
+                    else None
+                ),
+                model_inference_ms=(
+                    round(result["model_inference_ms"], 2)
+                    if result["model_inference_ms"] is not None
+                    else None
+                ),
+                model_total_ms=(
+                    round(result["model_total_ms"], 2)
+                    if result["model_total_ms"] is not None
+                    else None
+                ),
             )
 
             if fraud_flag == 1:
@@ -123,6 +148,34 @@ async def create_transaction(txn: TransactionIn, ws: Dependencies.Client):
                 )
         except Exception:
             logger.exception("Fraud detection endpoint call failed")
+
+    # --- Business rules: check user profile (overrides model approval) ---
+    profile = get_profile(txn.user_id)
+
+    if profile is not None:
+        user_country = profile.get("country_of_residence", "")
+        daily_limit = float(profile.get("daily_limit", 50000))
+        allow_intl = profile.get("allow_international_transactions", True)
+
+        # Rule 1: amount exceeds daily limit
+        if txn.amount > daily_limit:
+            status = TransactionStatus.DECLINED
+            decline_reason = (
+                f"Amount ${txn.amount:,.0f} exceeds your daily limit of "
+                f"${daily_limit:,.0f}. Update your profile to increase it."
+            )
+
+        # Rule 2: international transaction not allowed
+        if (
+            not allow_intl
+            and txn.country_code != user_country
+        ):
+            status = TransactionStatus.DECLINED
+            decline_reason = (
+                f"International transactions are disabled on your account. "
+                f"Transaction country ({txn.country_code}) differs from your "
+                f"country of residence ({user_country})."
+            )
 
     return TransactionOut(
         id=txn_id,
@@ -144,67 +197,52 @@ async def create_transaction(txn: TransactionIn, ws: Dependencies.Client):
 
 
 @router.get("/profile", response_model=UserProfileOut, operation_id="getProfile")
-async def get_profile_route():
-    row = get_profile("usr-001")
+async def get_profile_route(user_id: str = "usr-001"):
+    row = get_profile(user_id)
     if row is None:
         return UserProfileOut(
-            id="usr-001",
-            full_name="John Doe",
-            email="john.doe@databricks.com",
-            phone="+1 (555) 234-5678",
-            country_of_residence="United States",
-            country_code="840",
+            user_id=user_id,
+            full_name="Unknown User",
+            email="",
+            card_bin="000000",
+            credit_card_number="0000000000000000",
+            country_of_residence="US",
             preferred_currency="USD",
-            allow_international_transactions=False,
+            allow_international_transactions=True,
             daily_limit=5000,
             enable_notifications=True,
             two_factor_enabled=False,
-            eventhub_status="disconnected",
-            updated_at=datetime.now(timezone.utc),
         )
 
     return UserProfileOut(
-        id=row["user_id"],
+        user_id=row["user_id"],
         full_name=row["full_name"],
         email=row["email"],
         phone=row.get("phone"),
-        country_of_residence=row["country_of_residence"],
-        country_code=row["country_code"],
-        preferred_currency=row["preferred_currency"],
-        allow_international_transactions=row["allow_international_transactions"],
-        daily_limit=row["daily_limit"],
-        enable_notifications=row["enable_notifications"],
-        two_factor_enabled=row["two_factor_enabled"],
-        eventhub_status="connected",
-        updated_at=row["updated_at"],
+        card_bin=row["card_bin"],
+        credit_card_number=row.get("credit_card_number", ""),
+        card_network=row.get("card_network"),
+        country_of_residence=row.get("country_of_residence", "US"),
+        preferred_currency=row.get("preferred_currency", "USD"),
+        allow_international_transactions=row.get("allow_international_transactions", True),
+        daily_limit=float(row.get("daily_limit", 5000)),
+        enable_notifications=row.get("enable_notifications", True),
+        two_factor_enabled=row.get("two_factor_enabled", False),
     )
 
 
-@router.post("/profile", response_model=EventHubMessageOut, operation_id="updateProfile")
-async def update_profile(profile: UserProfileIn):
-    """Encodes profile as JSON and publishes to EventHub topic."""
-    now = datetime.now(timezone.utc)
-    event_id = str(uuid.uuid4())
-    partition_key = "usr-001"
+@router.post("/profile", response_model=ProfileSaveOut, operation_id="updateProfile")
+async def update_profile_route(profile: UserProfileIn):
+    """Write profile changes directly to customer_features in Postgres."""
+    data = profile.model_dump(exclude={"user_id"})
+    success = update_profile(profile.user_id, data)
 
-    payload = {
-        "event_id": event_id,
-        "event_type": "profile_update",
-        "user_id": "usr-001",
-        "timestamp": now.isoformat(),
-        "data": profile.model_dump(),
-    }
-
-    success = await send_event(payload, partition_key=partition_key)
-
-    eh_status = "sent" if success else "failed"
-
-    topic = f"{EH_NAMESPACE}/{EH_TOPIC}"
-    return EventHubMessageOut(
-        status=eh_status,
-        message=f"Profile update {'published to' if success else 'failed to publish to'} EventHub",
-        event_id=event_id,
-        topic=topic,
-        partition_key=partition_key,
-        timestamp=now,
+    return ProfileSaveOut(
+        status="saved" if success else "failed",
+        message=(
+            "Profile saved to database"
+            if success
+            else "Failed to save profile"
+        ),
+        user_id=profile.user_id,
     )

@@ -1,4 +1,5 @@
 import { ThemeProvider } from "@/components/apx/theme-provider";
+import { UserProvider } from "@/lib/UserContext";
 import { QueryClient } from "@tanstack/react-query";
 import { createRootRouteWithContext, Outlet } from "@tanstack/react-router";
 import { Toaster } from "sonner";
@@ -8,8 +9,10 @@ export const Route = createRootRouteWithContext<{
 }>()({
   component: () => (
     <ThemeProvider defaultTheme="dark" storageKey="apx-ui-theme">
-      <Outlet />
-      <Toaster richColors />
+      <UserProvider>
+        <Outlet />
+        <Toaster richColors />
+      </UserProvider>
     </ThemeProvider>
   ),
 });

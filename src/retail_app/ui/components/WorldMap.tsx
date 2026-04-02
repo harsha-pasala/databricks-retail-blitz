@@ -42,10 +42,51 @@ const COUNTRY_NAMES: Record<string, string> = {
   "860": "Uzbekistan", "862": "Venezuela", "887": "Yemen", "894": "Zambia",
 };
 
+/** Map GeoJSON numeric ISO codes to 2-letter alpha-2 codes. */
+const NUMERIC_TO_ALPHA2: Record<string, string> = {
+  "004": "AF", "008": "AL", "012": "DZ", "024": "AO",
+  "032": "AR", "036": "AU", "040": "AT", "050": "BD",
+  "056": "BE", "068": "BO", "076": "BR", "100": "BG",
+  "104": "MM", "116": "KH", "120": "CM", "124": "CA",
+  "144": "LK", "152": "CL", "156": "CN", "170": "CO",
+  "180": "CD", "188": "CR", "191": "HR", "192": "CU",
+  "196": "CY", "203": "CZ", "208": "DK", "214": "DO",
+  "218": "EC", "818": "EG", "222": "SV", "231": "ET",
+  "233": "EE", "246": "FI", "250": "FR", "266": "GA",
+  "276": "DE", "288": "GH", "300": "GR", "320": "GT",
+  "332": "HT", "340": "HN", "348": "HU", "352": "IS",
+  "356": "IN", "360": "ID", "364": "IR", "368": "IQ",
+  "372": "IE", "376": "IL", "380": "IT", "384": "CI",
+  "388": "JM", "392": "JP", "400": "JO", "398": "KZ",
+  "404": "KE", "408": "KP", "410": "KR", "414": "KW",
+  "418": "LA", "422": "LB", "426": "LS", "430": "LR",
+  "434": "LY", "440": "LT", "442": "LU", "450": "MG",
+  "454": "MW", "458": "MY", "466": "ML", "484": "MX",
+  "496": "MN", "504": "MA", "508": "MZ", "516": "NA",
+  "524": "NP", "528": "NL", "554": "NZ", "558": "NI",
+  "562": "NE", "566": "NG", "578": "NO", "586": "PK",
+  "591": "PA", "600": "PY", "604": "PE", "608": "PH",
+  "616": "PL", "620": "PT", "634": "QA", "642": "RO",
+  "643": "RU", "646": "RW", "682": "SA", "686": "SN",
+  "688": "RS", "694": "SL", "702": "SG", "703": "SK",
+  "704": "VN", "705": "SI", "706": "SO", "710": "ZA",
+  "716": "ZW", "724": "ES", "736": "SD", "740": "SR",
+  "752": "SE", "756": "CH", "760": "SY", "764": "TH",
+  "780": "TT", "784": "AE", "788": "TN", "792": "TR",
+  "800": "UG", "804": "UA", "826": "GB", "834": "TZ",
+  "840": "US", "854": "BF", "858": "UY",
+  "860": "UZ", "862": "VE", "887": "YE", "894": "ZM",
+};
+
+/** Reverse map: alpha-2 → numeric (for matching selectedCountryCode). */
+const ALPHA2_TO_NUMERIC: Record<string, string> = Object.fromEntries(
+  Object.entries(NUMERIC_TO_ALPHA2).map(([k, v]) => [v, k]),
+);
+
 interface WorldMapProps {
   selectedCountry: string | null;
-  selectedCountryCode: string | null;
-  onCountrySelect: (name: string, code: string) => void;
+  selectedCountryCode: string | null; // alpha-2 code (e.g. "US")
+  onCountrySelect: (name: string, code: string) => void; // code = alpha-2
   onCountryDeselect: () => void;
 }
 
@@ -58,16 +99,22 @@ function WorldMapInner({
   const [tooltipContent, setTooltipContent] = useState("");
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
+  // Convert alpha-2 back to numeric for GeoJSON comparison
+  const selectedNumeric = selectedCountryCode
+    ? ALPHA2_TO_NUMERIC[selectedCountryCode] || ""
+    : "";
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     setTooltipPos({ x: e.clientX, y: e.clientY });
   }, []);
 
   const handleCountryClick = useCallback(
-    (countryName: string, countryId: string) => {
-      if (countryId === selectedCountryCode) {
+    (countryName: string, numericId: string) => {
+      const alpha2 = NUMERIC_TO_ALPHA2[numericId] || numericId;
+      if (alpha2 === selectedCountryCode) {
         onCountryDeselect();
       } else {
-        onCountrySelect(countryName, countryId);
+        onCountrySelect(countryName, alpha2);
       }
     },
     [selectedCountryCode, onCountrySelect, onCountryDeselect]
@@ -92,17 +139,17 @@ function WorldMapInner({
         <Geographies geography={GEO_URL}>
           {({ geographies }) =>
             geographies.map((geo) => {
-              const countryId = geo.id as string;
+              const numericId = geo.id as string;
               const countryName =
-                COUNTRY_NAMES[countryId] || geo.properties.name || "Unknown";
-              const isSelected = countryId === selectedCountryCode;
+                COUNTRY_NAMES[numericId] || geo.properties.name || "Unknown";
+              const isSelected = numericId === selectedNumeric;
 
               return (
                 <Geography
                   key={geo.rsmKey}
                   geography={geo}
-                  data-testid={`country-${countryId}`}
-                  onClick={() => handleCountryClick(countryName, countryId)}
+                  data-testid={`country-${numericId}`}
+                  onClick={() => handleCountryClick(countryName, numericId)}
                   onMouseEnter={() => setTooltipContent(countryName)}
                   onMouseLeave={() => setTooltipContent("")}
                   className="cursor-pointer outline-none transition-colors duration-150"

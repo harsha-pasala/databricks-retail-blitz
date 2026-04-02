@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import { useUser } from "@/lib/UserContext";
 
 export const Route = createFileRoute("/profile")({
   component: () => <ProfilePage />,
@@ -9,21 +10,26 @@ export const Route = createFileRoute("/profile")({
 const CURRENCIES = ["USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "INR", "BRL", "MXN"];
 
 const COUNTRIES = [
-  { name: "United States", code: "840" },
-  { name: "United Kingdom", code: "826" },
-  { name: "Canada", code: "124" },
-  { name: "Germany", code: "276" },
-  { name: "France", code: "250" },
-  { name: "Japan", code: "392" },
-  { name: "Australia", code: "036" },
-  { name: "India", code: "356" },
-  { name: "Brazil", code: "076" },
-  { name: "Mexico", code: "484" },
-  { name: "Switzerland", code: "756" },
-  { name: "Netherlands", code: "528" },
-  { name: "Singapore", code: "702" },
-  { name: "South Korea", code: "410" },
-  { name: "UAE", code: "784" },
+  { name: "United States", code: "US" },
+  { name: "United Kingdom", code: "GB" },
+  { name: "Canada", code: "CA" },
+  { name: "Germany", code: "DE" },
+  { name: "France", code: "FR" },
+  { name: "Japan", code: "JP" },
+  { name: "Australia", code: "AU" },
+  { name: "India", code: "IN" },
+  { name: "Brazil", code: "BR" },
+  { name: "Mexico", code: "MX" },
+  { name: "Switzerland", code: "CH" },
+  { name: "Netherlands", code: "NL" },
+  { name: "Singapore", code: "SG" },
+  { name: "South Korea", code: "KR" },
+  { name: "UAE", code: "AE" },
+  { name: "Italy", code: "IT" },
+  { name: "Spain", code: "ES" },
+  { name: "China", code: "CN" },
+  { name: "South Africa", code: "ZA" },
+  { name: "Sweden", code: "SE" },
 ];
 
 function DatabricksLogo() {
@@ -36,57 +42,81 @@ function DatabricksLogo() {
   );
 }
 
-interface EventHubToast {
+interface UserItem {
+  user_id: string;
+  full_name: string;
+  email: string;
+  credit_card_number?: string;
+}
+
+interface SaveToast {
   visible: boolean;
-  eventId: string;
-  topic: string;
   status: string;
+  message: string;
 }
 
 type SyncState = "idle" | "waiting" | "synced" | "timeout";
 
 function ProfilePage() {
-  const [fullName, setFullName] = useState("John Doe");
-  const [email, setEmail] = useState("john.doe@databricks.com");
-  const [phone, setPhone] = useState("+1 (555) 234-5678");
-  const [country, setCountry] = useState("United States");
-  const [countryCode, setCountryCode] = useState("840");
+  const { selectedUser, setSelectedUser } = useUser();
+
+  // User list for dropdown
+  const [users, setUsers] = useState<UserItem[]>([]);
+
+  // Profile form fields
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [countryCode, setCountryCode] = useState("US");
   const [currency, setCurrency] = useState("USD");
   const [allowInternational, setAllowInternational] = useState(false);
   const [dailyLimit, setDailyLimit] = useState(5000);
   const [notifications, setNotifications] = useState(true);
   const [twoFactor, setTwoFactor] = useState(false);
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardNetwork, setCardNetwork] = useState("");
+
   const [submitting, setSubmitting] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [toast, setToast] = useState<EventHubToast>({
+  const [toast, setToast] = useState<SaveToast>({
     visible: false,
-    eventId: "",
-    topic: "",
     status: "",
+    message: "",
   });
 
   const [syncState, setSyncState] = useState<SyncState>("idle");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sentPayloadRef = useRef<Record<string, unknown> | null>(null);
 
+  // Fetch user list on mount
   useEffect(() => {
-    fetch("/api/profile")
+    fetch("/api/users")
       .then((r) => r.json())
-      .then((data) => {
-        setFullName(data.full_name);
-        setEmail(data.email);
-        setPhone(data.phone ?? "");
-        setCountry(data.country_of_residence);
-        setCountryCode(data.country_code);
-        setCurrency(data.preferred_currency);
-        setAllowInternational(data.allow_international_transactions);
-        setDailyLimit(data.daily_limit);
-        setNotifications(data.enable_notifications);
-        setTwoFactor(data.two_factor_enabled);
-        setLastSavedAt(data.updated_at);
-      })
+      .then((data: UserItem[]) => setUsers(data))
       .catch(() => {});
   }, []);
+
+  // Load profile when selected user changes
+  useEffect(() => {
+    if (!selectedUser) return;
+    fetch(`/api/profile?user_id=${encodeURIComponent(selectedUser.userId)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setFullName(data.full_name || "");
+        setEmail(data.email || "");
+        setPhone(data.phone ?? "");
+        setCountryCode(data.country_of_residence || "US");
+        setCurrency(data.preferred_currency || "USD");
+        setAllowInternational(data.allow_international_transactions ?? true);
+        setDailyLimit(data.daily_limit ?? 5000);
+        setNotifications(data.enable_notifications ?? true);
+        setTwoFactor(data.two_factor_enabled ?? false);
+        setCardNumber(data.credit_card_number || "");
+        setCardNetwork(data.card_network || "");
+        setLastSavedAt(null);
+      })
+      .catch(() => {});
+  }, [selectedUser]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -96,15 +126,18 @@ function ProfilePage() {
   }, []);
 
   const startPolling = useCallback(() => {
+    if (!selectedUser) return;
     stopPolling();
     setSyncState("waiting");
     let attempts = 0;
-    const maxAttempts = 60; // 60 * 2s = 2 min
+    const maxAttempts = 10; // 10 * 2s = 20s for direct DB write
 
     pollRef.current = setInterval(async () => {
       attempts++;
       try {
-        const res = await fetch("/api/profile");
+        const res = await fetch(
+          `/api/profile?user_id=${encodeURIComponent(selectedUser.userId)}`
+        );
         const data = await res.json();
 
         const sent = sentPayloadRef.current;
@@ -115,7 +148,7 @@ function ProfilePage() {
           data.country_of_residence === sent.country_of_residence
         ) {
           setSyncState("synced");
-          setLastSavedAt(data.updated_at);
+          setLastSavedAt(new Date().toISOString());
           stopPolling();
           setTimeout(() => setSyncState("idle"), 8000);
           return;
@@ -128,27 +161,31 @@ function ProfilePage() {
         setTimeout(() => setSyncState("idle"), 6000);
       }
     }, 2000);
-  }, [stopPolling]);
+  }, [selectedUser, stopPolling]);
 
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  const handleCountryChange = (value: string) => {
-    const selected = COUNTRIES.find((c) => c.name === value);
-    if (selected) {
-      setCountry(selected.name);
-      setCountryCode(selected.code);
+  const handleUserChange = (userId: string) => {
+    const user = users.find((u) => u.user_id === userId);
+    if (user) {
+      setSelectedUser({ userId: user.user_id, fullName: user.full_name });
     }
   };
 
+  const handleCountryChange = (value: string) => {
+    setCountryCode(value);
+  };
+
   const handleSubmit = async () => {
+    if (!selectedUser) return;
     setSubmitting(true);
     try {
       const payload = {
+        user_id: selectedUser.userId,
         full_name: fullName,
         email,
         phone,
-        country_of_residence: country,
-        country_code: countryCode,
+        country_of_residence: countryCode,
         preferred_currency: currency,
         allow_international_transactions: allowInternational,
         daily_limit: dailyLimit,
@@ -164,15 +201,16 @@ function ProfilePage() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
+
       setToast({
         visible: true,
-        eventId: data.event_id,
-        topic: data.topic,
-        status: data.status === "sent" ? "delivered" : data.status,
+        status: data.status === "saved" ? "success" : "error",
+        message: data.message,
       });
       setTimeout(() => setToast((t) => ({ ...t, visible: false })), 5000);
 
-      if (data.status === "sent") {
+      if (data.status === "saved") {
+        setLastSavedAt(new Date().toISOString());
         startPolling();
       }
     } finally {
@@ -227,13 +265,37 @@ function ProfilePage() {
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-[#FF3621] to-[#FF6F61] flex items-center justify-center text-white text-2xl font-bold">
               {fullName.split(" ").map((n) => n[0]).join("").slice(0, 2)}
             </div>
-            <div>
+            <div className="flex-1">
               <h1 className="text-2xl font-bold text-foreground">User Profile</h1>
               <p className="text-sm text-muted-foreground">
                 Manage account settings and preferences
               </p>
             </div>
           </div>
+
+          {/* User Selector */}
+          <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+            <div className="flex items-center gap-2 mb-1">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#FF3621]">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              <h2 className="text-base font-semibold text-foreground">Select User</h2>
+            </div>
+            <select
+              value={selectedUser?.userId || ""}
+              onChange={(e) => handleUserChange(e.target.value)}
+              className="w-full h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#FF3621]/50 focus:border-[#FF3621]/50 transition-all"
+            >
+              {users.map((u) => (
+                <option key={u.user_id} value={u.user_id}>
+                  {u.full_name} ({u.user_id})
+                </option>
+              ))}
+            </select>
+          </section>
 
           {/* Sync Status Banner */}
           <AnimatePresence>
@@ -258,10 +320,10 @@ function ProfilePage() {
                       <div className="w-5 h-5 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
                       <div>
                         <p className="text-sm font-medium text-yellow-400">
-                          Waiting for Spark to sync to Postgres...
+                          Saving to Postgres...
                         </p>
                         <p className="text-xs text-yellow-400/70 mt-0.5">
-                          EventHub → Spark Structured Streaming → PostgreSQL
+                          Writing profile to customer_features table
                         </p>
                       </div>
                     </>
@@ -275,7 +337,7 @@ function ProfilePage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-[#00A972]">
-                          Profile synced to Postgres!
+                          Profile saved to Postgres!
                         </p>
                         <p className="text-xs text-[#00A972]/70 mt-0.5">
                           Changes are live — transactions will use updated rules
@@ -292,10 +354,10 @@ function ProfilePage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-red-400">
-                          Sync timed out
+                          Save verification timed out
                         </p>
                         <p className="text-xs text-red-400/70 mt-0.5">
-                          Spark streaming job may not be running. Check your pipeline.
+                          Changes may have been saved but could not be verified
                         </p>
                       </div>
                     </>
@@ -324,9 +386,29 @@ function ProfilePage() {
                   Account ID
                 </label>
                 <div className="h-10 rounded-lg border border-border bg-muted/30 px-3 flex items-center text-sm text-muted-foreground font-mono">
-                  usr-001
+                  {selectedUser?.userId || "—"}
                 </div>
               </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Credit Card
+                </label>
+                <div className="h-10 rounded-lg border border-border bg-muted/30 px-3 flex items-center text-sm text-muted-foreground font-mono tracking-wider">
+                  {cardNumber
+                    ? cardNumber.replace(/(\d{4})(?=\d)/g, "$1 ")
+                    : "—"}
+                </div>
+              </div>
+              {cardNetwork && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Card Network
+                  </label>
+                  <div className="h-10 rounded-lg border border-border bg-muted/30 px-3 flex items-center text-sm text-muted-foreground">
+                    {cardNetwork}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
@@ -346,12 +428,12 @@ function ProfilePage() {
                   Country of Residence
                 </label>
                 <select
-                  value={country}
+                  value={countryCode}
                   onChange={(e) => handleCountryChange(e.target.value)}
                   className="w-full h-10 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#FF3621]/50 focus:border-[#FF3621]/50 transition-all"
                 >
                   {COUNTRIES.map((c) => (
-                    <option key={c.code} value={c.name}>
+                    <option key={c.code} value={c.code}>
                       {c.name}
                     </option>
                   ))}
@@ -427,47 +509,33 @@ function ProfilePage() {
             </div>
           </section>
 
-          {/* EventHub Info */}
+          {/* EventHub Info (kept for future iteration) */}
           <section className="rounded-xl border border-border bg-card p-6 space-y-3">
             <div className="flex items-center gap-2 mb-1">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#FF3621]">
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
               </svg>
               <h2 className="text-base font-semibold text-foreground">Event Pipeline</h2>
+              <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full ml-2">
+                Coming Soon
+              </span>
             </div>
             <div className="rounded-lg bg-[#1B3139] p-4 font-mono text-xs leading-relaxed space-y-1.5">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 rounded-full bg-[#00A972]" />
-                <span className="text-white/60">Azure EventHub connected</span>
-              </div>
-              <div>
-                <span className="text-white/40">Namespace: </span>
-                <span className="text-[#6CB6FF]">dlt-eventhub</span>
-                <span className="text-white/30">.servicebus.windows.net</span>
-              </div>
-              <div>
-                <span className="text-white/40">Topic: </span>
-                <span className="text-[#00A972]">user-profile-updates</span>
-              </div>
-              <div>
-                <span className="text-white/40">Consumer Group: </span>
-                <span className="text-[#FF6F61]">$Default</span>
-              </div>
-              <div>
-                <span className="text-white/40">Auth: </span>
-                <span className="text-[#6CB6FF]">SAS / RootManageSharedAccessKey</span>
-              </div>
-              <div className="pt-1.5 border-t border-white/10 mt-2">
-                <span className="text-white/40">Consumer: </span>
-                <span className="text-[#6CB6FF]">Spark Streaming job → PostgreSQL</span>
+                <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                <span className="text-white/60">Azure EventHub — not connected (next iteration)</span>
               </div>
               <div>
                 <span className="text-white/40">Pattern: </span>
                 <span className="text-[#FF6F61]">App → EventHub → Spark Structured Streaming → Postgres</span>
               </div>
+              <div>
+                <span className="text-white/40">Current: </span>
+                <span className="text-[#6CB6FF]">App → Direct Postgres Write</span>
+              </div>
               {lastSavedAt && (
                 <div className="pt-1.5 border-t border-white/10 mt-2">
-                  <span className="text-white/40">Last Postgres update: </span>
+                  <span className="text-white/40">Last save: </span>
                   <span className="text-[#6CB6FF]">{new Date(lastSavedAt).toLocaleString()}</span>
                 </div>
               )}
@@ -485,13 +553,13 @@ function ProfilePage() {
                   : "bg-[#FF3621] hover:bg-[#E52E1A] text-white shadow-lg shadow-[#FF3621]/20 hover:shadow-[#FF3621]/40 active:scale-[0.98]"
               }`}
             >
-              {submitting ? "Publishing to EventHub..." : "Save & Publish to EventHub"}
+              {submitting ? "Saving..." : "Save Profile"}
             </button>
           </div>
         </div>
       </main>
 
-      {/* EventHub Toast */}
+      {/* Save Toast */}
       <AnimatePresence>
         {toast.visible && (
           <motion.div
@@ -501,27 +569,32 @@ function ProfilePage() {
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.3 }}
           >
-            <div className="rounded-xl border border-[#00A972]/30 bg-card shadow-2xl overflow-hidden">
-              <div className="h-1 bg-[#00A972]" />
+            <div className={`rounded-xl border shadow-2xl overflow-hidden ${
+              toast.status === "success"
+                ? "border-[#00A972]/30 bg-card"
+                : "border-red-500/30 bg-card"
+            }`}>
+              <div className={`h-1 ${toast.status === "success" ? "bg-[#00A972]" : "bg-red-500"}`} />
               <div className="p-4 space-y-2">
                 <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-[#00A972] flex items-center justify-center">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-white">
-                      <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                    toast.status === "success" ? "bg-[#00A972]" : "bg-red-500"
+                  }`}>
+                    {toast.status === "success" ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-white">
+                        <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    ) : (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-white">
+                        <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                      </svg>
+                    )}
                   </div>
-                  <span className="text-sm font-semibold text-foreground">Published to EventHub</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {toast.status === "success" ? "Profile Saved" : "Save Failed"}
+                  </span>
                 </div>
-                <div className="rounded-lg bg-[#1B3139] p-3 font-mono text-[11px] leading-relaxed">
-                  <span className="text-white/40">event_id: </span>
-                  <span className="text-[#6CB6FF]">{toast.eventId.slice(0, 8)}...</span>
-                  <br />
-                  <span className="text-white/40">topic: </span>
-                  <span className="text-[#00A972]">{toast.topic}</span>
-                  <br />
-                  <span className="text-white/40">status: </span>
-                  <span className="text-[#FF6F61]">{toast.status}</span>
-                </div>
+                <p className="text-xs text-muted-foreground">{toast.message}</p>
               </div>
             </div>
           </motion.div>

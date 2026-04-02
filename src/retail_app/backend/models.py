@@ -22,8 +22,9 @@ class TransactionStatus(str, Enum):
 
 
 class TransactionIn(BaseModel):
+    user_id: str
     country: str
-    country_code: str
+    country_code: str  # 2-letter ISO
     amount: float = Field(ge=10, le=10000)
     credit_card_number: str
     currency: str = "USD"
@@ -55,12 +56,19 @@ class TransactionOut(BaseModel):
     created_at: datetime
 
 
+class UserSummary(BaseModel):
+    user_id: str
+    full_name: str
+    email: str
+    credit_card_number: Optional[str] = None
+
+
 class UserProfileIn(BaseModel):
+    user_id: str
     full_name: str
     email: str
     phone: Optional[str] = None
-    country_of_residence: str
-    country_code: str
+    country_of_residence: str  # 2-letter ISO code
     preferred_currency: str = "USD"
     allow_international_transactions: bool = True
     daily_limit: float = Field(ge=100, le=50000, default=5000)
@@ -69,19 +77,25 @@ class UserProfileIn(BaseModel):
 
 
 class UserProfileOut(BaseModel):
-    id: str
+    user_id: str
     full_name: str
     email: str
     phone: Optional[str] = None
+    card_bin: str
+    credit_card_number: str
+    card_network: Optional[str] = None
     country_of_residence: str
-    country_code: str
     preferred_currency: str
     allow_international_transactions: bool
     daily_limit: float
     enable_notifications: bool
     two_factor_enabled: bool
-    eventhub_status: str
-    updated_at: datetime
+
+
+class ProfileSaveOut(BaseModel):
+    status: str
+    message: str
+    user_id: str
 
 
 class EventHubMessageOut(BaseModel):
