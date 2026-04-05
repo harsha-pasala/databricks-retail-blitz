@@ -72,12 +72,10 @@ function ProfilePage() {
   const [allowInternational, setAllowInternational] = useState(false);
   const [dailyLimit, setDailyLimit] = useState(5000);
   const [notifications, setNotifications] = useState(true);
-  const [twoFactor, setTwoFactor] = useState(false);
   const [cardNumber, setCardNumber] = useState("");
   const [cardNetwork, setCardNetwork] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [toast, setToast] = useState<SaveToast>({
     visible: false,
     status: "",
@@ -110,10 +108,8 @@ function ProfilePage() {
         setAllowInternational(data.allow_international_transactions ?? true);
         setDailyLimit(data.daily_limit ?? 5000);
         setNotifications(data.enable_notifications ?? true);
-        setTwoFactor(data.two_factor_enabled ?? false);
         setCardNumber(data.credit_card_number || "");
         setCardNetwork(data.card_network || "");
-        setLastSavedAt(null);
       })
       .catch(() => {});
   }, [selectedUser]);
@@ -148,7 +144,6 @@ function ProfilePage() {
           data.country_of_residence === sent.country_of_residence
         ) {
           setSyncState("synced");
-          setLastSavedAt(new Date().toISOString());
           stopPolling();
           setTimeout(() => setSyncState("idle"), 8000);
           return;
@@ -190,7 +185,6 @@ function ProfilePage() {
         allow_international_transactions: allowInternational,
         daily_limit: dailyLimit,
         enable_notifications: notifications,
-        two_factor_enabled: twoFactor,
       };
 
       sentPayloadRef.current = payload;
@@ -210,7 +204,6 @@ function ProfilePage() {
       setTimeout(() => setToast((t) => ({ ...t, visible: false })), 5000);
 
       if (data.status === "saved") {
-        setLastSavedAt(new Date().toISOString());
         startPolling();
       }
     } finally {
@@ -500,45 +493,6 @@ function ProfilePage() {
                 checked={notifications}
                 onChange={setNotifications}
               />
-              <Toggle
-                label="Two-Factor Authentication"
-                description="Require 2FA for transactions above daily limit"
-                checked={twoFactor}
-                onChange={setTwoFactor}
-              />
-            </div>
-          </section>
-
-          {/* EventHub Info (kept for future iteration) */}
-          <section className="rounded-xl border border-border bg-card p-6 space-y-3">
-            <div className="flex items-center gap-2 mb-1">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[#FF3621]">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-              <h2 className="text-base font-semibold text-foreground">Event Pipeline</h2>
-              <span className="text-[10px] text-muted-foreground bg-muted px-2 py-0.5 rounded-full ml-2">
-                Coming Soon
-              </span>
-            </div>
-            <div className="rounded-lg bg-[#1B3139] p-4 font-mono text-xs leading-relaxed space-y-1.5">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-2 h-2 rounded-full bg-yellow-500" />
-                <span className="text-white/60">Azure EventHub — not connected (next iteration)</span>
-              </div>
-              <div>
-                <span className="text-white/40">Pattern: </span>
-                <span className="text-[#FF6F61]">App → EventHub → Spark Structured Streaming → Postgres</span>
-              </div>
-              <div>
-                <span className="text-white/40">Current: </span>
-                <span className="text-[#6CB6FF]">App → Direct Postgres Write</span>
-              </div>
-              {lastSavedAt && (
-                <div className="pt-1.5 border-t border-white/10 mt-2">
-                  <span className="text-white/40">Last save: </span>
-                  <span className="text-[#6CB6FF]">{new Date(lastSavedAt).toLocaleString()}</span>
-                </div>
-              )}
             </div>
           </section>
 

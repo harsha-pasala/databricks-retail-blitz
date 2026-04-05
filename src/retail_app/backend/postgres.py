@@ -215,7 +215,6 @@ def update_profile(user_id: str, data: dict[str, Any]) -> bool:
         "allow_international_transactions",
         "daily_limit",
         "enable_notifications",
-        "two_factor_enabled",
     ]
 
     updates = []

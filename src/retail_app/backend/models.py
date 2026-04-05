@@ -74,7 +74,6 @@ class UserProfileIn(BaseModel):
     allow_international_transactions: bool = True
     daily_limit: float = Field(ge=100, le=50000, default=5000)
     enable_notifications: bool = True
-    two_factor_enabled: bool = False
 
 
 class UserProfileOut(BaseModel):
@@ -90,7 +89,6 @@ class UserProfileOut(BaseModel):
     allow_international_transactions: bool
     daily_limit: float
     enable_notifications: bool
-    two_factor_enabled: bool
 
 
 class ProfileSaveOut(BaseModel):
