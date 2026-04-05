@@ -163,9 +163,22 @@ for i, user in enumerate(DEMO_USERS):
     customers.loc[i, "enable_notifications"] = True
     customers.loc[i, "two_factor_enabled"] = False
 
+# Force 10 demo users to high-risk (risk_tier=3) so the model declines them
+# These indices correspond to: usr-001, usr-004, usr-005, usr-007, usr-008,
+#   usr-009, usr-012, usr-014, usr-017, usr-019
+HIGH_RISK_DEMO_INDICES = [0, 3, 4, 6, 7, 8, 11, 13, 16, 18]
+for idx in HIGH_RISK_DEMO_INDICES:
+    customers.loc[idx, "risk_tier"] = 3
+    customers.loc[idx, "chargeback_rate"] = np.round(np.random.uniform(0.02, 0.05), 5)
+    customers.loc[idx, "high_risk_merchant_ratio"] = np.round(np.random.uniform(0.2, 0.5), 4)
+    customers.loc[idx, "velocity_24h"] = np.random.randint(15, 40)
+    customers.loc[idx, "cross_border_ratio"] = np.round(np.random.uniform(0.5, 0.9), 4)
+    customers.loc[idx, "avg_fraud_score_30d"] = np.round(np.random.uniform(0.3, 0.8), 4)
+
 print(f"Generated {len(customers)} customer features")
 print(f"Risk tier distribution:\n{customers['risk_tier'].value_counts().sort_index()}")
 print(f"Demo users assigned: {len(DEMO_USERS)}")
+print(f"High-risk demo users: {len(HIGH_RISK_DEMO_INDICES)}")
 
 # COMMAND ----------
 

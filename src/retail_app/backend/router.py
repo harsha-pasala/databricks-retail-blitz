@@ -150,6 +150,7 @@ async def create_transaction(txn: TransactionIn, ws: Dependencies.Client):
             logger.exception("Fraud detection endpoint call failed")
 
     # --- Business rules: check user profile (overrides model approval) ---
+    biz_start = time.perf_counter()
     profile = get_profile(txn.user_id)
 
     if profile is not None:
@@ -176,6 +177,19 @@ async def create_transaction(txn: TransactionIn, ws: Dependencies.Client):
                 f"Transaction country ({txn.country_code}) differs from your "
                 f"country of residence ({user_country})."
             )
+
+    business_logic_ms = round((time.perf_counter() - biz_start) * 1000, 2)
+
+    # Attach business_logic_ms to latency (create one if model wasn't called)
+    if latency is not None:
+        latency.business_logic_ms = business_logic_ms
+    else:
+        backend_total_ms = (time.perf_counter() - backend_start) * 1000
+        latency = FraudCheckLatency(
+            backend_total_ms=round(backend_total_ms, 2),
+            model_call_ms=0,
+            business_logic_ms=business_logic_ms,
+        )
 
     return TransactionOut(
         id=txn_id,

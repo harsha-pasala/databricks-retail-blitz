@@ -5,12 +5,14 @@ interface LatencyBreakdown {
   modelLookupMs?: number;
   modelInferenceMs?: number;
   modelTotalMs?: number;
+  businessLogicMs?: number;
 }
 
 interface CardTapAnimationProps {
   visible: boolean;
   onComplete: () => void;
   lastFour: string;
+  cardholderName?: string;
   amount: string;
   country: string;
   declined?: boolean;
@@ -35,7 +37,7 @@ function LatencyRow({
   const pct = Math.max((ms / maxMs) * 100, 2);
   return (
     <div className="flex items-center gap-2" style={{ paddingLeft: indent }}>
-      <span className="text-[10px] text-white/50 w-[110px] shrink-0 text-right font-mono">
+      <span className="text-[10px] text-white/50 w-[130px] shrink-0 text-right font-mono">
         {label}
       </span>
       <div className="flex-1 h-[14px] rounded-sm bg-white/5 relative overflow-hidden">
@@ -58,6 +60,7 @@ export function CardTapAnimation({
   visible,
   onComplete,
   lastFour,
+  cardholderName = "Cardholder",
   amount,
   declined = false,
   declineReason,
@@ -70,10 +73,10 @@ export function CardTapAnimation({
 
   const maxMs = latency
     ? Math.max(
-        latency.modelCallMs,
         latency.modelTotalMs ?? 0,
         latency.modelLookupMs ?? 0,
         latency.modelInferenceMs ?? 0,
+        latency.businessLogicMs ?? 0,
         1
       )
     : 1;
@@ -227,7 +230,7 @@ export function CardTapAnimation({
                 </div>
                 <div className="flex justify-between items-end">
                   <span className="text-white/70 text-xs font-medium uppercase tracking-wide">
-                    John Doe
+                    {cardholderName}
                   </span>
                   <span className="text-white/60 text-xs font-mono">
                     DATABRICKS
@@ -366,38 +369,40 @@ export function CardTapAnimation({
                     </span>
                   </div>
 
-                  <LatencyRow
-                    label="Model Serving"
-                    ms={latency.modelCallMs}
-                    maxMs={maxMs}
-                    color="#FF3621"
-                    indent={8}
-                  />
                   {latency.modelTotalMs !== undefined && (
                     <LatencyRow
-                      label="Model Total"
+                      label="Model Inference"
                       ms={latency.modelTotalMs}
                       maxMs={maxMs}
-                      color="#FB7185"
-                      indent={16}
+                      color="#FF3621"
+                      indent={8}
                     />
                   )}
                   {latency.modelLookupMs !== undefined && (
                     <LatencyRow
-                      label="DB Lookup"
+                      label="Feature Lookup"
                       ms={latency.modelLookupMs}
                       maxMs={maxMs}
                       color="#F59E0B"
-                      indent={24}
+                      indent={16}
                     />
                   )}
                   {latency.modelInferenceMs !== undefined && (
                     <LatencyRow
-                      label="Predict"
+                      label="Model Prediction"
                       ms={latency.modelInferenceMs}
                       maxMs={maxMs}
                       color="#00A972"
-                      indent={24}
+                      indent={16}
+                    />
+                  )}
+                  {latency.businessLogicMs !== undefined && (
+                    <LatencyRow
+                      label="Business Logic"
+                      ms={latency.businessLogicMs}
+                      maxMs={maxMs}
+                      color="#6CB6FF"
+                      indent={8}
                     />
                   )}
                 </motion.div>

@@ -52,6 +52,7 @@ interface LatencyBreakdown {
   modelLookupMs?: number;
   modelInferenceMs?: number;
   modelTotalMs?: number;
+  businessLogicMs?: number;
 }
 
 interface TxnResult {
@@ -140,6 +141,7 @@ function Index() {
             modelLookupMs: data.latency.model_lookup_ms ?? undefined,
             modelInferenceMs: data.latency.model_inference_ms ?? undefined,
             modelTotalMs: data.latency.model_total_ms ?? undefined,
+            businessLogicMs: data.latency.business_logic_ms ?? undefined,
           }
         : undefined;
 
@@ -429,6 +431,7 @@ function Index() {
         visible={showAnimation}
         onComplete={() => setShowAnimation(false)}
         lastFour={cardNumber.slice(-4) || "0000"}
+        cardholderName={profile?.fullName}
         amount={formatCurrency(amount)}
         country={selectedCountry || ""}
         declined={txnResult.declined}

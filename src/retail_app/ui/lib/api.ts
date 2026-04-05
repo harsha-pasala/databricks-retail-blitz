@@ -14,6 +14,7 @@ export class ApiError extends Error {
 }
 export interface FraudCheckLatency {
     backend_total_ms: number;
+    business_logic_ms?: number | null;
     model_call_ms: number;
     model_inference_ms?: number | null;
     model_lookup_ms?: number | null;

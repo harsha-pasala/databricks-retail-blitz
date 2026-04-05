@@ -36,6 +36,7 @@ class FraudCheckLatency(BaseModel):
     model_lookup_ms: Optional[float] = None
     model_inference_ms: Optional[float] = None
     model_total_ms: Optional[float] = None
+    business_logic_ms: Optional[float] = None
 
 
 class TransactionOut(BaseModel):

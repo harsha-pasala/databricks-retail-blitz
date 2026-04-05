@@ -3,13 +3,14 @@ from __future__ import annotations
 import base64
 import logging
 import os
+import threading
 import time
-from contextlib import contextmanager
 from decimal import Decimal
 from typing import Any
 
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 import requests
 
 logger = logging.getLogger("retail-app.postgres")
@@ -31,11 +32,16 @@ OIDC_TOKEN_URL = os.getenv(
 
 TABLE = "customer_features"
 
+# Credential cache (loaded lazily)
+_creds: dict[str, str] = {"client_id": "", "client_secret": "", "loaded": ""}
+
 # OAuth token cache
 _token_cache: dict[str, Any] = {"token": None, "expires_at": 0.0}
 
-# Credential cache (loaded lazily)
-_creds: dict[str, str] = {"client_id": "", "client_secret": "", "loaded": ""}
+# Connection pool
+_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+_pool_token: str = ""
+_pool_lock = threading.Lock()
 
 
 def _ensure_credentials() -> tuple[str, str]:
@@ -100,30 +106,52 @@ def _get_oauth_token() -> str:
     return _token_cache["token"]
 
 
-@contextmanager
-def _get_conn():
-    client_id, client_secret = _ensure_credentials()
+def _ensure_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    """Return a valid connection pool, creating or rebuilding as needed."""
+    global _pool, _pool_token
 
-    if client_id and client_secret and OIDC_TOKEN_URL:
-        user = client_id
-        password = _get_oauth_token()
-    else:
-        user = os.getenv("PG_USER", "")
-        password = os.getenv("PG_PASSWORD", "")
+    client_id, _ = _ensure_credentials()
+    current_token = _get_oauth_token()
 
-    conn = psycopg2.connect(
-        host=PG_HOST,
-        port=PG_PORT,
-        dbname=PG_DB,
-        user=user,
-        password=password,
-        sslmode="require",
-        connect_timeout=10,
-    )
+    # Fast path: pool exists and token hasn't changed
+    if _pool is not None and _pool_token == current_token:
+        return _pool
+
+    with _pool_lock:
+        # Double-check after acquiring lock
+        if _pool is not None and _pool_token == current_token:
+            return _pool
+
+        old_pool = _pool
+
+        _pool = psycopg2.pool.ThreadedConnectionPool(
+            minconn=3,
+            maxconn=10,
+            host=PG_HOST,
+            port=PG_PORT,
+            dbname=PG_DB,
+            user=client_id,
+            password=current_token,
+            sslmode="require",
+            connect_timeout=10,
+        )
+        _pool_token = current_token
+        logger.info("Connection pool created (min=3, max=10)")
+
+        # Close old pool after a delay so in-flight queries finish
+        if old_pool is not None:
+            threading.Timer(30.0, _close_pool, [old_pool]).start()
+
+        return _pool
+
+
+def _close_pool(pool: psycopg2.pool.ThreadedConnectionPool) -> None:
+    """Safely close an old pool."""
     try:
-        yield conn
-    finally:
-        conn.close()
+        pool.closeall()
+        logger.info("Old connection pool closed")
+    except Exception:
+        logger.exception("Error closing old connection pool")
 
 
 def _to_dict(row: dict) -> dict:
@@ -137,7 +165,9 @@ def _to_dict(row: dict) -> dict:
 def list_users() -> list[dict[str, Any]]:
     """Return all rows that have a user_id (the demo users)."""
     try:
-        with _get_conn() as conn:
+        pool = _ensure_pool()
+        conn = pool.getconn()
+        try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
                     f"SELECT user_id, full_name, email, credit_card_number "
@@ -145,6 +175,8 @@ def list_users() -> list[dict[str, Any]]:
                     f"ORDER BY user_id"
                 )
                 return [_to_dict(row) for row in cur.fetchall()]
+        finally:
+            pool.putconn(conn)
     except Exception:
         logger.exception("Failed to list users")
         return []
@@ -153,7 +185,9 @@ def list_users() -> list[dict[str, Any]]:
 def get_profile(user_id: str) -> dict[str, Any] | None:
     """Read a user profile from customer_features."""
     try:
-        with _get_conn() as conn:
+        pool = _ensure_pool()
+        conn = pool.getconn()
+        try:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
                     f"SELECT * FROM {TABLE} WHERE user_id = %s",
@@ -163,6 +197,8 @@ def get_profile(user_id: str) -> dict[str, Any] | None:
                 if row is None:
                     return None
                 return _to_dict(row)
+        finally:
+            pool.putconn(conn)
     except Exception:
         logger.exception("Failed to read profile from Postgres")
         return None
@@ -196,7 +232,9 @@ def update_profile(user_id: str, data: dict[str, Any]) -> bool:
     set_clause = ", ".join(updates)
 
     try:
-        with _get_conn() as conn:
+        pool = _ensure_pool()
+        conn = pool.getconn()
+        try:
             conn.autocommit = True
             with conn.cursor() as cur:
                 cur.execute(
@@ -204,6 +242,8 @@ def update_profile(user_id: str, data: dict[str, Any]) -> bool:
                     values,
                 )
                 return cur.rowcount > 0
+        finally:
+            pool.putconn(conn)
     except Exception:
         logger.exception("Failed to update profile")
         return False
