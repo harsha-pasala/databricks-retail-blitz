@@ -1,0 +1,43 @@
+{
+  "cookies": [
+    {
+      "name": "__Host-databricksapps_csrf",
+      "value": "JpTMBkrEcRL2TW7HW8AYfOSchtBpRglA1tJovTr0aGF6nVk8Sd9yQmw3uFqRWOmIAx05nxqaPi3UY5GNNoAfSodWOX9IYWOEl5FoGdGy1FKDYaFL3nexRdvy4jTS8UNMLhUok5nz5EvtIVr4uQcOHyvuvd3PzuTkdzECpok1fCQ-v8QiP3GDJozIwRdtfL7lhGoOTjJ8tqUeAht8qohHAaPyUcii_NNFFVJXpDPjk6MGmWmJxHoE4DZ2W8RP6Q==|1773057605|aZmjsqXKDWumzznljRBxsn09VQ9Pk4pDTtbF-eHU_xM=",
+      "domain": "retail-app-7405618727830009.9.azure.databricksapps.com",
+      "path": "/",
+      "expires": 1773058505.613185,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "workspace-url",
+      "value": "adb-7405618727830009.9.azuredatabricks.net",
+      "domain": ".azuredatabricks.net",
+      "path": "/",
+      "expires": 1775649607.06601,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Strict"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://adb-7405618727830009.9.azuredatabricks.net",
+      "localStorage": [
+        {
+          "name": "uiInitTimestamp-WORKSPACE_CONSOLE_LOGIN",
+          "value": "1773057606010"
+        },
+        {
+          "name": "LogQueue-Lease",
+          "value": "LogQueue-Queue-746ac4d0"
+        },
+        {
+          "name": "LocalStorage-Metrics-Counter-Id",
+          "value": "1b2cb875-ca54-4402-abe0-8c7e74bcc638"
+        }
+      ]
+    }
+  ]
+}
