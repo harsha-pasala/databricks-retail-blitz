@@ -18,18 +18,7 @@ The [full repo is on GitHub](#)—you can fork it, deploy it to your workspace, 
 
 Before we look at code, here's the plain story of a single payment. Two checks run in sequence: an AI model scores the charge, then the app checks your profile rules. Either one can decline the transaction.
 
-```mermaid
-flowchart TD
-    A["Customer taps 'Pay'"] --> B["Fraud model scores the charge"]
-    B --> C{"Flagged as fraud?"}
-    C -- Yes --> D["Declined: fraud detected"]
-    C -- No --> E["Look up customer profile"]
-    E --> F{"Exceeds daily limit?\nInternational blocked?"}
-    F -- Yes --> G["Declined: rule violation"]
-    F -- No --> H["Approved"]
-```
-
-
+**Customer taps pay → Fraud model scores the charge → Profile rules checked → Approved or declined**
 
 That's it. The model runs first because we want its latency numbers regardless of the outcome. Then the profile lookup—daily spending cap, international transaction toggle, country of residence—feeds a handful of if-statements. The response includes timing for every step so you can see exactly where the milliseconds went.
 
