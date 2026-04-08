@@ -75,7 +75,6 @@ export function CardTapAnimation({
     ? Math.max(
         latency.modelTotalMs ?? 0,
         latency.modelLookupMs ?? 0,
-        latency.modelInferenceMs ?? 0,
         latency.businessLogicMs ?? 0,
         1
       )
@@ -384,15 +383,6 @@ export function CardTapAnimation({
                       ms={latency.modelLookupMs}
                       maxMs={maxMs}
                       color="#F59E0B"
-                      indent={16}
-                    />
-                  )}
-                  {latency.modelInferenceMs !== undefined && (
-                    <LatencyRow
-                      label="Model Prediction"
-                      ms={latency.modelInferenceMs}
-                      maxMs={maxMs}
-                      color="#00A972"
                       indent={16}
                     />
                   )}
