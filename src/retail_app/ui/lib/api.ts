@@ -69,7 +69,6 @@ export interface UserProfileIn {
     full_name: string;
     phone?: string | null;
     preferred_currency?: string;
-    two_factor_enabled?: boolean;
     user_id: string;
 }
 export interface UserProfileOut {
@@ -84,7 +83,6 @@ export interface UserProfileOut {
     full_name: string;
     phone?: string | null;
     preferred_currency: string;
-    two_factor_enabled: boolean;
     user_id: string;
 }
 export interface UserSummary {
