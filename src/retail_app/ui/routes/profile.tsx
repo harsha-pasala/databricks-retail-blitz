@@ -71,7 +71,6 @@ function ProfilePage() {
   const [currency, setCurrency] = useState("USD");
   const [allowInternational, setAllowInternational] = useState(false);
   const [dailyLimit, setDailyLimit] = useState(5000);
-  const [notifications, setNotifications] = useState(true);
   const [cardNumber, setCardNumber] = useState("");
   const [cardNetwork, setCardNetwork] = useState("");
 
@@ -107,7 +106,6 @@ function ProfilePage() {
         setCurrency(data.preferred_currency || "USD");
         setAllowInternational(data.allow_international_transactions ?? true);
         setDailyLimit(data.daily_limit ?? 5000);
-        setNotifications(data.enable_notifications ?? true);
         setCardNumber(data.credit_card_number || "");
         setCardNetwork(data.card_network || "");
       })
@@ -184,7 +182,6 @@ function ProfilePage() {
         preferred_currency: currency,
         allow_international_transactions: allowInternational,
         daily_limit: dailyLimit,
-        enable_notifications: notifications,
       };
 
       sentPayloadRef.current = payload;
@@ -486,12 +483,6 @@ function ProfilePage() {
                 description="Enable transactions from countries other than your residence"
                 checked={allowInternational}
                 onChange={setAllowInternational}
-              />
-              <Toggle
-                label="Enable Notifications"
-                description="Receive alerts for transactions and security events"
-                checked={notifications}
-                onChange={setNotifications}
               />
             </div>
           </section>

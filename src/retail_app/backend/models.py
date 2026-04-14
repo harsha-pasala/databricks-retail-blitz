@@ -73,7 +73,6 @@ class UserProfileIn(BaseModel):
     preferred_currency: str = "USD"
     allow_international_transactions: bool = True
     daily_limit: float = Field(ge=100, le=50000, default=5000)
-    enable_notifications: bool = True
 
 
 class UserProfileOut(BaseModel):
@@ -88,7 +87,6 @@ class UserProfileOut(BaseModel):
     preferred_currency: str
     allow_international_transactions: bool
     daily_limit: float
-    enable_notifications: bool
 
 
 class ProfileSaveOut(BaseModel):

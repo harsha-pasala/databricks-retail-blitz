@@ -224,7 +224,6 @@ async def get_profile_route(user_id: str = "usr-001"):
             preferred_currency="USD",
             allow_international_transactions=True,
             daily_limit=5000,
-            enable_notifications=True,
         )
 
     return UserProfileOut(
@@ -239,7 +238,6 @@ async def get_profile_route(user_id: str = "usr-001"):
         preferred_currency=row.get("preferred_currency", "USD"),
         allow_international_transactions=row.get("allow_international_transactions", True),
         daily_limit=float(row.get("daily_limit", 5000)),
-        enable_notifications=row.get("enable_notifications", True),
     )
 
 
