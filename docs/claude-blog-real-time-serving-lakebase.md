@@ -1,16 +1,16 @@
-# What Happens in the milliseconds after you tap pay
+# What happens in the milliseconds after you tap pay
 
-You're standing at the register. You tap your card. A tiny spinner appears—maybe half a second, maybe less, and then it says **Approved**. Or it doesn't.
+You're standing at the register. You tap your card. A tiny spinner appears for maybe half a second, maybe less, and then it says **Approved**. Or it doesn't.
 
-During that time, something had to decide whether this charge looks like you, or like someone who stole your card number in a data breach six months ago. It had to know things about you such as your spending patterns, your daily limit, whether you even allow purchases from other countries. And it had to do all of that fast enough that you don't notice it happened.
+During that time, something had to decide whether this charge looks like you, or like someone who stole your card number in a data breach six months ago. It had to know things about you: your spending patterns, your daily limit, whether you even allow purchases from other countries. And it had to do all of that fast enough that you don't notice it happened.
 
-This post is about what that "something" looks like when you build it on Databricks. We'll walk through **retail-app**, a sample application (FastAPI backend, React frontend, built with [apx](https://docs.databricks.com/en/dev-tools/databricks-apps/app-development.html)) that puts three platform capabilities together:
+This post is about what that "something" looks like when you build it on Databricks. We'll walk through **retail-app**, a sample application (FastAPI backend, React frontend, built with [apx](https://docs.databricks.com/en/dev-tools/databricks-apps/app-development.html)) that brings three platform capabilities together:
 
-- **Model Serving with route optimization** — a faster network path to your deployed model
-- **Lakebase** — managed Postgres for the profile and feature data the model needs at prediction time
-- **Lakebase Autoscaling** — so the database scales with demand instead of becoming the new bottleneck
+- **Model Serving with route optimization**, a faster network path to your deployed model
+- **Lakebase**, a managed Postgres for the profile and feature data the model needs at prediction time
+- **Lakebase Autoscaling**, so the database scales with demand instead of becoming the new bottleneck
 
-The [full repo is on GitHub](#)—you can fork it, deploy it to your workspace, and tap "pay" yourself.
+The [full repo is on GitHub](#), you can fork it, deploy it to your workspace, and tap "pay" yourself.
 
 ---
 
@@ -20,9 +20,9 @@ Before we look at code, here's the plain story of a single payment. Two checks r
 
 **Customer taps pay → Fraud model scores the charge → Profile rules checked → Approved or declined**
 
-That's it. The model runs first because we want its latency numbers regardless of the outcome. Then the profile lookup—daily spending cap, international transaction toggle, country of residence—feeds a handful of if-statements. The response includes timing for every step so you can see exactly where the milliseconds went.
+That's it. The model runs first because we want its latency numbers regardless of the outcome. Then the profile lookup (daily spending cap, international transaction toggle, country of residence) feeds a handful of if-statements. The response includes timing for every step so you can see exactly where the milliseconds went.
 
-**Updating your profile** (changing your daily limit, toggling international transactions) is a separate action. You save changes to the database, and the *next* payment picks them up—no redeployment, no cache invalidation.
+**Updating your profile** (changing your daily limit, toggling international transactions) is a separate action. You save changes to the database, and the *next* payment picks them up. No redeployment, no cache invalidation.
 
 ---
 
@@ -30,7 +30,7 @@ That's it. The model runs first because we want its latency numbers regardless o
 
 When a model is deployed behind Databricks Model Serving, there's a network hop between your application and the inference container. For batch workloads, a few extra milliseconds per request is irrelevant. For a checkout experience, it's everything.
 
-[Route optimization](https://docs.databricks.com/aws/en/machine-learning/model-serving/route-optimization) shortens that network path. You enable it when you create the endpoint, and you query through the **data-plane** flow using OAuth—not personal access tokens. The result is lower latency and higher throughput for the same compute, which is exactly what an interactive fraud-scoring use case needs.
+[Route optimization](https://docs.databricks.com/aws/en/machine-learning/model-serving/route-optimization) shortens that network path. You enable it when you create the endpoint, and you query through the **data-plane** flow using OAuth, not personal access tokens. You get lower latency and higher throughput for the same compute, which is exactly what an interactive fraud-scoring use case needs.
 
 In the sample app, the endpoint is called `fraud-detection-lakebase`. Here's the constant and the function that calls it:
 
@@ -64,11 +64,11 @@ async def _check_fraud(
 
 A few things to notice:
 
-- `**serving_endpoints_data_plane.query**` — This is the data-plane query path, which is what route optimization uses. The Databricks SDK handles the OAuth token exchange under the hood.
-- `**asyncio.to_thread**` — The SDK's query method is synchronous. Wrapping it in `to_thread` keeps the FastAPI event loop free while the model runs.
-- `**dataframe_records**` — The payload is a list of dictionaries (one per row). For fraud scoring, we send one transaction at a time.
+- `**serving_endpoints_data_plane.query**`: This is the data-plane query path, which is what route optimization uses. The Databricks SDK handles the OAuth token exchange under the hood.
+- `**asyncio.to_thread**`: The SDK's query method is synchronous. Wrapping it in `to_thread` keeps the FastAPI event loop free while the model runs.
+- `**dataframe_records**`: The payload is a list of dictionaries (one per row). For fraud scoring, we send one transaction at a time.
 
-The model itself returns `fraud_probability`, `fraud_flag`, and—crucially—its own internal timing: `lookup_ms` (how long the feature lookup inside the model container took), `inference_ms` (CatBoost prediction), and `total_ms`. The backend maps these through so the frontend can show a latency waterfall:
+The model itself returns `fraud_probability`, `fraud_flag`, and (crucially) its own internal timing: `lookup_ms` (how long the feature lookup inside the model container took), `inference_ms` (CatBoost prediction), and `total_ms`. The backend maps these through so the frontend can show a latency waterfall:
 
 ```python
 # src/retail_app/backend/router.py
@@ -84,7 +84,7 @@ return {
 }
 ```
 
-So when you see "Model: 45ms (lookup: 8ms, inference: 3ms)" in the UI, those aren't made-up numbers—they're measured at each layer and stitched together in a single response.
+So when you see "Model: 45ms (lookup: 8ms, inference: 3ms)" in the UI, those aren't made-up numbers. They're measured at each layer and stitched together in a single response.
 
 For more on setting this up: [Route optimization](https://docs.databricks.com/aws/en/machine-learning/model-serving/route-optimization) · [Querying route-optimized endpoints](https://docs.databricks.com/aws/en/machine-learning/model-serving/query-route-optimization).
 
@@ -92,95 +92,45 @@ For more on setting this up: [Route optimization](https://docs.databricks.com/aw
 
 ## Lakebase: Postgres for the data the model needs
 
-The fraud model doesn't just look at the transaction in isolation. It looks up the customer's historical features—average transaction amount, cross-border ratio, chargeback rate, velocity over the past 24 hours—using the first six digits of the credit card (the BIN) as the lookup key. Those features live in a [Lakebase](https://docs.databricks.com/aws/en/oltp) Postgres table called `customer_features`.
+The fraud model doesn't just look at the transaction in isolation. It looks up the customer's historical features (average transaction amount, cross-border ratio, chargeback rate, velocity over the past 24 hours) using the first six digits of the credit card (the BIN) as the lookup key. Those features live in a [Lakebase](https://docs.databricks.com/aws/en/oltp) Postgres table called `customer_features`.
 
 This is the same table the *backend* reads from for profile data (name, daily limit, international toggle). One table, two readers: the model container reads features for inference, the FastAPI app reads profile fields for business rules.
 
-Here's the backend's profile read:
+On the read side, the backend borrows a connection from the pool, runs a parameterized `SELECT` by `user_id`, and returns the connection in a `finally` block. Straightforward psycopg2, but the borrow/return discipline matters when this runs on every transaction. The query uses parameterized placeholders (not string interpolation), so the lookup key is never concatenated into the SQL.
 
-```python
-# src/retail_app/backend/postgres.py
-
-TABLE = "customer_features"
-
-def get_profile(user_id: str) -> dict[str, Any] | None:
-    """Read a user profile from customer_features."""
-    try:
-        pool = _ensure_pool()
-        conn = pool.getconn()
-        try:
-            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute(
-                    f"SELECT * FROM {TABLE} WHERE user_id = %s",
-                    (user_id,),
-                )
-                row = cur.fetchone()
-                if row is None:
-                    return None
-                return _to_dict(row)
-        finally:
-            pool.putconn(conn)
-    except Exception:
-        logger.exception("Failed to read profile from Postgres")
-        return None
-```
-
-Parameterized query, connection borrowed from the pool, returned in a `finally` block. Simple, but correct—which matters when this runs on every transaction.
-
-Profile *writes* work the same way. When a user changes their daily limit in the UI, `update_profile` builds a dynamic `UPDATE` from an allowlist of editable columns:
-
-```python
-# src/retail_app/backend/postgres.py
-
-def update_profile(user_id: str, data: dict[str, Any]) -> bool:
-    profile_fields = [
-        "full_name", "email", "phone", "country_of_residence",
-        "preferred_currency", "allow_international_transactions",
-        "daily_limit", "enable_notifications",
-    ]
-
-    updates = []
-    values: list[Any] = []
-    for field in profile_fields:
-        if field in data:
-            updates.append(f"{field} = %s")
-            values.append(data[field])
-
-    if not updates:
-        return False
-
-    values.append(user_id)
-    set_clause = ", ".join(updates)
-
-    try:
-        pool = _ensure_pool()
-        conn = pool.getconn()
-        try:
-            conn.autocommit = True
-            with conn.cursor() as cur:
-                cur.execute(
-                    f"UPDATE {TABLE} SET {set_clause} WHERE user_id = %s",
-                    values,
-                )
-                return cur.rowcount > 0
-        finally:
-            pool.putconn(conn)
-    except Exception:
-        logger.exception("Failed to update profile")
-        return False
-```
-
-Only fields in the allowlist get written. The client can't inject arbitrary column names. `autocommit = True` means the write is immediately visible—so the next transaction sees the new limit without waiting for a batch flush.
+On the write side, when a user changes their daily limit or toggles international transactions in the UI, the backend builds a dynamic `UPDATE` from an allowlist of editable columns. Only fields on that list are written; the client can't inject arbitrary column names. The write runs with `autocommit = True`, so the change is immediately visible: the very next transaction sees the updated limit without waiting for a batch flush or cache invalidation.
 
 ---
 
 ## Connection pooling and OAuth token rotation
 
-Lakebase authenticates via OAuth: the app exchanges service principal credentials for an access token, then uses the **client ID as the Postgres username** and the **token as the password**. This is standard for Databricks-managed Postgres—no long-lived database passwords.
+Every transaction in this app hits Postgres at least twice: once inside the model container for the feature lookup, and once in the backend for the profile check. Opening a fresh connection each time means a TCP handshake plus a TLS negotiation on every single request, which would easily add 20-50 ms of overhead per call. A connection pool keeps a handful of connections open and ready, so most requests just grab one and go.
 
-The connection pool is a `psycopg2.pool.ThreadedConnectionPool` with 3–10 connections. Every database operation borrows a connection with `getconn()` and returns it with `putconn()` in a `finally` block.
+Here's what that looks like in practice. Every database operation follows the same borrow/query/return pattern:
 
-The interesting part is what happens when the OAuth token expires. You can't just keep using the old password on pooled connections—they'd fail on the next query. So `_ensure_pool` checks whether the token has changed, and if it has, builds a fresh pool:
+```python
+# src/retail_app/backend/postgres.py
+
+def list_users() -> list[dict[str, Any]]:
+    pool = _ensure_pool()
+    conn = pool.getconn()                          # borrow
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                f"SELECT user_id, full_name, email, credit_card_number "
+                f"FROM {TABLE} WHERE user_id IS NOT NULL "
+                f"ORDER BY user_id"
+            )
+            return [_to_dict(row) for row in cur.fetchall()]
+    finally:
+        pool.putconn(conn)                         # return
+```
+
+Borrow a connection, run your query, return the connection in a `finally` block so it always goes back even if something throws. Every read and write in the app follows this same shape.
+
+The pool itself is a `psycopg2.pool.ThreadedConnectionPool` with 3–10 connections. But building it is where things get interesting, because Lakebase authenticates via OAuth. The app exchanges service principal credentials for an access token, then uses the **client ID as the Postgres username** and the **token as the password**. No long-lived database passwords.
+
+That means when the token expires, you can't just keep using the old password on pooled connections, because they'd fail on the next query. So `_ensure_pool` checks whether the token has changed, and if it has, builds a fresh pool:
 
 ```python
 # src/retail_app/backend/postgres.py
@@ -222,13 +172,13 @@ def _ensure_pool() -> psycopg2.pool.ThreadedConnectionPool:
         return _pool
 ```
 
-The double-check locking pattern prevents two threads from rebuilding the pool simultaneously. The 30-second timer on closing the old pool gives in-flight queries time to finish before their connections disappear. It's a small detail, but it's the difference between "works in a demo" and "works under load."
+Most of the time, the fast path fires: the pool exists, the token hasn't changed, and we return immediately. When the token does rotate, the double-check locking keeps two threads from rebuilding the pool at the same time, and the 30-second timer on closing the old pool gives in-flight queries time to finish before their connections disappear. Small detail, but it's the difference between "works in a demo" and "works under load."
 
 ---
 
 ## The model's side: feature lookup inside the container
 
-The fraud model itself—deployed as an MLflow pyfunc—does its *own* Lakebase lookup at prediction time. It extracts the card BIN, queries `customer_features`, assembles a feature vector, and runs CatBoost inference. Each step is timed:
+The fraud model itself (deployed as an MLflow pyfunc) does its *own* Lakebase lookup at prediction time. It extracts the card BIN, queries `customer_features`, assembles a feature vector, and runs CatBoost inference. Each step is timed:
 
 ```python
 # model_training/fraud_model.py (inside FraudDetectionModel.predict)
@@ -246,57 +196,29 @@ fraud_prob = float(self.model.predict_proba(feature_vector)[0, 1])
 inference_ms = (time.perf_counter() - t_infer_start) * 1000
 ```
 
-The model container maintains its own `ThreadedConnectionPool` to Lakebase (the `LakebaseConnectionPool` class in `fraud_model.py`), with background token refresh so the pool stays valid across long-running serving instances. This is the same pattern as the backend—pool + OAuth rotation—but running inside the model container rather than the FastAPI process.
+The model container maintains its own `ThreadedConnectionPool` to Lakebase (the `LakebaseConnectionPool` class in `fraud_model.py`), with background token refresh so the pool stays valid across long-running serving instances. This is the same pattern as the backend (pool + OAuth rotation), but running inside the model container rather than the FastAPI process.
 
-The `lookup_ms` and `inference_ms` values flow back through the serving response, through the backend, and into the frontend. That's how you get end-to-end visibility: the model reports its internal timing, the backend adds its own wall-clock measurement, and the user sees all of it.
+Those `lookup_ms` and `inference_ms` values flow back through the serving response, through the backend, and into the frontend. That's how you get end-to-end visibility: the model reports its internal timing, the backend adds its own wall-clock measurement, and the user sees all of it.
 
 ---
 
 ## Business rules: the profile check
 
-After the model scores the transaction, the backend reads the customer's profile from Lakebase and applies two rules:
+After the model scores the transaction, the backend reads the customer's profile from Lakebase and runs two simple rules. First, it compares the transaction amount against the user's daily spending limit. If the charge exceeds the cap, the transaction is declined with a message telling the user they can raise it in their profile settings. Second, if the user has disabled international transactions, the backend checks whether the transaction's country matches the user's country of residence. A mismatch means a decline.
 
-```python
-# src/retail_app/backend/router.py
+Either rule can *override* a model approval. A transaction the model thinks is fine can still be declined because the user set a $500 daily cap. That's intentional. The model handles statistical risk; the profile handles user preferences. Both read from the same Lakebase table, but they serve different purposes.
 
-profile = get_profile(txn.user_id)
-
-if profile is not None:
-    daily_limit = float(profile.get("daily_limit", 50000))
-    allow_intl = profile.get("allow_international_transactions", True)
-
-    # Rule 1: amount exceeds daily limit
-    if txn.amount > daily_limit:
-        status = TransactionStatus.DECLINED
-        decline_reason = (
-            f"Amount ${txn.amount:,.0f} exceeds your daily limit of "
-            f"${daily_limit:,.0f}. Update your profile to increase it."
-        )
-
-    # Rule 2: international transaction not allowed
-    if not allow_intl and txn.country_code != user_country:
-        status = TransactionStatus.DECLINED
-        decline_reason = (
-            f"International transactions are disabled on your account."
-        )
-```
-
-These rules can *override* a model approval—a transaction the model thinks is fine can still be declined because the user set a $500 daily cap. That's intentional. The model handles statistical risk; the profile handles user preferences. Both read from the same Lakebase table, but they serve different purposes.
-
-The time spent on the profile lookup and rule evaluation is tracked as `business_logic_ms` and returned alongside the model timing:
-
-```python
-business_logic_ms = round((time.perf_counter() - biz_start) * 1000, 2)
-latency.business_logic_ms = business_logic_ms
-```
+The time spent on the profile lookup and rule checks is tracked as `business_logic_ms` and returned alongside the model timing, so you can see exactly how much overhead the business logic adds to each transaction.
 
 ---
 
 ## Lakebase Autoscaling: handling demand
 
-In production, your Postgres instance needs to handle both the model container's feature lookups *and* the backend's profile reads—potentially many of each per second during peak hours. [Lakebase Autoscaling](https://docs.databricks.com/aws/en/oltp/autoscaling) adjusts compute within a configured min/max range so you're not paying for peak capacity at 3 AM, but you're also not dropping queries at noon.
+In production, your Postgres instance needs to handle both the model container's feature lookups *and* the backend's profile reads, potentially many of each per second during peak hours. [Lakebase Autoscaling](https://docs.databricks.com/aws/en/oltp/autoscaling) adjusts compute within a configured min/max range so you're not paying for peak capacity at 3 AM, but you're also not dropping queries at noon.
 
-This matters because optimizing the serving layer (route optimization for low-latency inference) only helps if the database behind it can keep up. If the model's feature lookup blocks on a saturated Postgres connection, you've moved the bottleneck rather than removing it. Autoscaling is how you avoid that.
+Here's the thing: optimizing the serving layer (route optimization for low-latency inference) only helps if the database behind it can keep up. If the model's feature lookup blocks on a saturated Postgres connection, you've moved the bottleneck rather than removing it. Autoscaling is how you avoid that.
+
+In the benchmark results below, the consistent single-digit lookup times at p50 through p75 reflect what a warmed Lakebase instance delivers under steady load. The jump at p95 (13.9 ms) is typical of connection pool churn or brief scale-up events, still well within the latency budget for a checkout flow, and exactly the kind of spike that autoscaling absorbs before it becomes user-visible. With scale-to-zero enabled, you also stop paying when no transactions are flowing. The instance spins back up on the first request and is ready within seconds.
 
 ---
 
@@ -315,9 +237,34 @@ Here's the full latency picture for a single transaction:
 | `backend_total_ms`   | Everything from request to response         | Backend (`router.py`)    |
 
 
-The gap between `model_total_ms` and `model_call_ms` is network overhead—and that's exactly where route optimization helps. The gap between `backend_total_ms` and `model_call_ms + business_logic_ms` is framework overhead (serialization, routing, etc.).
+The gap between `model_total_ms` and `model_call_ms` is network overhead, and that's exactly where route optimization helps. The gap between `backend_total_ms` and `model_call_ms + business_logic_ms` is framework overhead (serialization, routing, etc.).
 
-When you run the app and submit a transaction, the UI shows these numbers. That makes it easy to demonstrate the difference route optimization makes, or to show that a Lakebase feature lookup adds single-digit milliseconds rather than the hundreds you might expect from a cold database connection.
+When you run the app and submit a transaction, the UI shows all of these. Makes it easy to see the difference route optimization makes, or to show that a Lakebase feature lookup adds single-digit milliseconds rather than the hundreds you might expect from a cold database connection.
+
+---
+
+## Results: How fast is it really?
+
+We sent **5,000 requests** to the route-optimized `fraud-detection-lakebase` endpoint (CPU, "Small" workload size, single Azure region) and collected latency at every layer, from within the model container to the caller's round-trip.
+
+
+| Metric                                      | What it measures                             | p50     | p75     | p90     | p95     |
+| ------------------------------------------- | -------------------------------------------- | ------- | ------- | ------- | ------- |
+| **Feature lookup** (`lookup_ms`)            | Lakebase read inside the model container     | 8.9 ms  | 9.8 ms  | 11.7 ms | 13.9 ms |
+| **Inference** (`inference_ms`)              | CatBoost prediction                          | 0.4 ms  | 0.5 ms  | 1.6 ms  | 6.0 ms  |
+| **Total model time** (`total_ms`)           | Lookup + inference + container overhead      | 9.5 ms  | 10.9 ms | 14.9 ms | 17.6 ms |
+| **End-to-end round trip** (`round_trip_ms`) | Full data-plane call from caller to response | 27.2 ms | 29.6 ms | 33.8 ms | 37.3 ms |
+| **Network overhead**                        | Round trip minus model time                  | 17.4 ms | 18.5 ms | 19.8 ms | 21.1 ms |
+
+
+**5,000/5,000 calls succeeded.**
+
+A few things stand out:
+
+- **End-to-end round trip is 27 ms at the median, 37 ms at p95.** That's the full journey: caller → route-optimized data plane → model container → Lakebase lookup → CatBoost inference → response. Well within the latency budget for a checkout flow.
+- **Feature lookup is single-digit milliseconds at p50 (8.9 ms).** The model's connection pool to Lakebase keeps connections warm, so most reads skip the TLS handshake entirely. Even at p95 the lookup stays under 14 ms.
+- **Inference is essentially free.** CatBoost prediction on a 12-feature vector takes 0.4 ms at the median. The model's time is dominated by the feature lookup, not the prediction itself.
+- **Network overhead is ~17 ms.** The gap between what the model container reports and what the caller sees is the serving infrastructure: request routing, serialization, and the data-plane hop. Route optimization keeps this consistent: the p50-to-p95 spread is only 4 ms.
 
 ---
 
@@ -339,10 +286,10 @@ databricks bundle deploy -t dev
 
 The key files:
 
-- `src/retail_app/backend/router.py` — Transaction endpoint, fraud check, business rules
-- `src/retail_app/backend/postgres.py` — Lakebase connection pool, profile CRUD
-- `model_training/fraud_model.py` — MLflow pyfunc with feature lookup and CatBoost
-- `app.yml` — Deployment config (uvicorn entrypoint, environment variables)
+- `src/retail_app/backend/router.py`: Transaction endpoint, fraud check, business rules
+- `src/retail_app/backend/postgres.py`: Lakebase connection pool, profile CRUD
+- `model_training/fraud_model.py`: MLflow pyfunc with feature lookup and CatBoost
+- `app.yml`: Deployment config (uvicorn entrypoint, environment variables)
 
 ---
 
