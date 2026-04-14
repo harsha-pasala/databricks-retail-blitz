@@ -38,3 +38,9 @@ node_modules/
 
 # UI dist folder
 src/retail_app/__dist__/
+
+# Playwright auth state (session cookies)
+e2e/.auth/
+
+# Test artifacts
+e2e/test-results/
