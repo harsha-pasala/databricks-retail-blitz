@@ -214,7 +214,7 @@ The time spent on the profile lookup and rule checks is tracked as `business_log
 
 ## Lakebase Autoscaling: handling demand
 
-In production, your Postgres instance needs to handle both the model container's feature lookups *and* the backend's profile reads, potentially many of each per second during peak hours. [Lakebase Autoscaling](https://docs.databricks.com/aws/en/oltp/autoscaling) adjusts compute within a configured min/max range so you're not paying for peak capacity at 3 AM, but you're also not dropping queries at noon.
+In production, your Postgres instance needs to handle both the model container's feature lookups *and* the backend's profile reads, potentially many of each per second during peak hours. [Lakebase Autoscaling](https://docs.databricks.com/aws/en/oltp/projects/autoscaling) adjusts compute within a configured min/max range so you're not paying for peak capacity at 3 AM, but you're also not dropping queries at noon.
 
 Here's the thing: optimizing the serving layer (route optimization for low-latency inference) only helps if the database behind it can keep up. If the model's feature lookup blocks on a saturated Postgres connection, you've moved the bottleneck rather than removing it. Autoscaling is how you avoid that.
 
@@ -299,7 +299,7 @@ The key files:
 - [Querying route-optimized serving endpoints](https://docs.databricks.com/aws/en/machine-learning/model-serving/query-route-optimization)
 - [Optimize serving endpoints for production](https://docs.databricks.com/aws/en/machine-learning/model-serving/production-optimization)
 - [Lakebase (OLTP)](https://docs.databricks.com/aws/en/oltp)
-- [Lakebase Autoscaling](https://docs.databricks.com/aws/en/oltp/autoscaling)
+- [Lakebase Autoscaling](https://docs.databricks.com/aws/en/oltp/projects/autoscaling)
 - [Databricks Apps](https://docs.databricks.com/en/dev-tools/databricks-apps/app-development.html)
-- [MLflow code-based models](https://mlflow.org/docs/latest/models.html#python-function-python-model)
+- [MLflow code-based models](https://mlflow.org/docs/latest/ml/model/)
 
