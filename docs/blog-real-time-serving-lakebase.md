@@ -84,7 +84,7 @@ return {
 }
 ```
 
-So when you see the latency breakdown in the UI — "Model Inference: 45ms" with "Feature Lookup: 8ms" nested underneath — those aren't made-up numbers. They're measured at each layer and stitched together in a single response.
+So when you see the latency breakdown in the UI ("Model Inference: 45ms" with "Feature Lookup: 8ms" nested underneath), those aren't made-up numbers. They're measured at each layer and stitched together in a single response.
 
 For more on setting this up: [Route optimization](https://docs.databricks.com/aws/en/machine-learning/model-serving/route-optimization) · [Querying route-optimized endpoints](https://docs.databricks.com/aws/en/machine-learning/model-serving/query-route-optimization).
 
@@ -245,7 +245,7 @@ When you run the app and submit a transaction, the UI shows the key ones: Model 
 
 ## Results: How fast is it really?
 
-We sent **5,000 requests** to the route-optimized `fraud-detection-lakebase` endpoint (CPU, "Small" workload size, single Azure region) and collected latency at every layer, from within the model container to the caller's round-trip. These numbers come from the benchmark script (`scripts/benchmark.py`), which calls the model endpoint directly — the UI latency breakdown shows a different slice (Model Inference, Feature Lookup, and Business Logic) measured through the full backend route.
+We sent **5,000 requests** to the route-optimized `fraud-detection-lakebase` endpoint (CPU, "Small" workload size, single Azure region) and collected latency at every layer, from within the model container to the caller's round-trip. These numbers come from the benchmark script (`scripts/benchmark.py`), which calls the model endpoint directly. The UI latency breakdown shows a different slice (Model Inference, Feature Lookup, and Business Logic) measured through the full backend route.
 
 
 | Metric                                      | What it measures                             | p50     | p75     | p90     | p95     |
@@ -270,7 +270,15 @@ A few things stand out:
 
 ## Try it yourself
 
-The app is built as a [Databricks App](https://docs.databricks.com/en/dev-tools/databricks-apps/app-development.html) (FastAPI backend, React frontend). To run locally:
+The app is built as a [Databricks App](https://docs.databricks.com/en/dev-tools/databricks-apps/app-development.html) (FastAPI backend, React frontend) using [apx](https://github.com/databricks-solutions/apx). Install it first:
+
+```bash
+curl -fsSL https://databricks-solutions.github.io/apx/install.sh | sh
+```
+
+You'll also need Databricks CLI authentication configured for the workspace where the model serving endpoint and Lakebase instance are deployed. 
+
+To run locally:
 
 ```bash
 apx dev start     # starts FastAPI + React dev servers
