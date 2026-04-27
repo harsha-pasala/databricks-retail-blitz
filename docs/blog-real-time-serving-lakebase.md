@@ -4,7 +4,7 @@ You're standing at the register. You tap your card. A tiny spinner appears for m
 
 During that time, something had to decide whether this charge looks like you, or like someone who stole your card number in a data breach six months ago. It had to know things about you: your spending patterns, your daily limit, whether you even allow purchases from other countries. And it had to do all of that fast enough that you don't notice it happened.
 
-This post is about what that "something" looks like when you build it on Databricks. We'll walk through **retail-app**, a sample application (FastAPI backend, React frontend, built with [apx](https://docs.databricks.com/en/dev-tools/databricks-apps/app-development.html)) that brings three platform capabilities together:
+This post is about what that "something" looks like when you build it on Databricks. We'll walk through **retail-app**, a sample application (FastAPI backend, React frontend, deployed as a [Databricks App](https://docs.databricks.com/en/dev-tools/databricks-apps/app-development.html)) that brings three platform capabilities together:
 
 - **Model Serving with route optimization**, a faster network path to your deployed model
 - **Lakebase**, a managed Postgres for the profile and feature data the model needs at prediction time
@@ -84,7 +84,7 @@ return {
 }
 ```
 
-So when you see "Model: 45ms (lookup: 8ms, inference: 3ms)" in the UI, those aren't made-up numbers. They're measured at each layer and stitched together in a single response.
+So when you see the latency breakdown in the UI — "Model Inference: 45ms" with "Feature Lookup: 8ms" nested underneath — those aren't made-up numbers. They're measured at each layer and stitched together in a single response.
 
 For more on setting this up: [Route optimization](https://docs.databricks.com/aws/en/machine-learning/model-serving/route-optimization) · [Querying route-optimized endpoints](https://docs.databricks.com/aws/en/machine-learning/model-serving/query-route-optimization).
 
@@ -96,7 +96,7 @@ The fraud model doesn't just look at the transaction in isolation. It looks up t
 
 This is the same table the *backend* reads from for profile data (name, daily limit, international toggle). One table, two readers: the model container reads features for inference, the FastAPI app reads profile fields for business rules.
 
-On the read side, the backend borrows a connection from the pool, runs a parameterized `SELECT` by `user_id`, and returns the connection in a `finally` block. Straightforward psycopg2, but the borrow/return discipline matters when this runs on every transaction. The query uses parameterized placeholders (not string interpolation), so the lookup key is never concatenated into the SQL.
+On the read side, the backend borrows a connection from the pool, runs a parameterized `SELECT` by `user_id`, and returns the connection in a `finally` block. Straightforward psycopg2, but the borrow/return discipline matters when this runs on every transaction. The query uses parameterized placeholders for user input, so the lookup key is never concatenated into the SQL.
 
 On the write side, when a user changes their daily limit or toggles international transactions in the UI, the backend builds a dynamic `UPDATE` from an allowlist of editable columns. Only fields on that list are written; the client can't inject arbitrary column names. The write runs with `autocommit = True`, so the change is immediately visible: the very next transaction sees the updated limit without waiting for a batch flush or cache invalidation.
 
@@ -239,13 +239,13 @@ Here's the full latency picture for a single transaction:
 
 The gap between `model_total_ms` and `model_call_ms` is network overhead, and that's exactly where route optimization helps. The gap between `backend_total_ms` and `model_call_ms + business_logic_ms` is framework overhead (serialization, routing, etc.).
 
-When you run the app and submit a transaction, the UI shows all of these. Makes it easy to see the difference route optimization makes, or to show that a Lakebase feature lookup adds single-digit milliseconds rather than the hundreds you might expect from a cold database connection.
+When you run the app and submit a transaction, the UI shows the key ones: Model Inference, Feature Lookup, and Business Logic. Makes it easy to see the difference route optimization makes, or to show that a Lakebase feature lookup adds single-digit milliseconds rather than the hundreds you might expect from a cold database connection.
 
 ---
 
 ## Results: How fast is it really?
 
-We sent **5,000 requests** to the route-optimized `fraud-detection-lakebase` endpoint (CPU, "Small" workload size, single Azure region) and collected latency at every layer, from within the model container to the caller's round-trip.
+We sent **5,000 requests** to the route-optimized `fraud-detection-lakebase` endpoint (CPU, "Small" workload size, single Azure region) and collected latency at every layer, from within the model container to the caller's round-trip. These numbers come from the benchmark script (`scripts/benchmark.py`), which calls the model endpoint directly — the UI latency breakdown shows a different slice (Model Inference, Feature Lookup, and Business Logic) measured through the full backend route.
 
 
 | Metric                                      | What it measures                             | p50     | p75     | p90     | p95     |
@@ -270,7 +270,7 @@ A few things stand out:
 
 ## Try it yourself
 
-The app is built with [apx](https://docs.databricks.com/en/dev-tools/databricks-apps/app-development.html) (Databricks' toolkit for full-stack apps). To run locally:
+The app is built as a [Databricks App](https://docs.databricks.com/en/dev-tools/databricks-apps/app-development.html) (FastAPI backend, React frontend). To run locally:
 
 ```bash
 apx dev start     # starts FastAPI + React dev servers
