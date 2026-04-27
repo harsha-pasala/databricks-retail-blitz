@@ -10,7 +10,7 @@ This post is about what that "something" looks like when you build it on Databri
 - **Lakebase**, a managed Postgres for the profile and feature data the model needs at prediction time
 - **Lakebase Autoscaling**, so the database scales with demand instead of becoming the new bottleneck
 
-The [full repo is on GitHub](#), you can fork it, deploy it to your workspace, and tap "pay" yourself.
+The [full repo is on GitHub](https://github.com/harsha-pasala/databricks-retail-blitz), you can fork it, deploy it to your workspace, and tap "pay" yourself.
 
 ---
 
